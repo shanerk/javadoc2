@@ -31,4 +31,4 @@ const args = require("yargs")
 		help: "help"
 	}).argv;
 
-require(__dirname + "/../src/javadoc.js").generate(args);
+require(__dirname + "/../src/javadoc2.js").generate(args);
