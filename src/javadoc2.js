@@ -21,23 +21,38 @@ module.exports = {
         };
 
         function extractJavadocData(text) {
-            const REGEX_GLOBAL_CLASSNAME= /(global).*class ([A-Z][a-z])\w+/g;
-            const REGEX_GLOBAL_METHODNAME = /(global\s)+[\w\<\>\[\]\,\s]*\s*(\w+) *\([^\)]*\) *(\{?|[^;])/g;
+            const REGEX_GLOBAL_CLASSNAME= /global.*class ([A-Z][a-z])\w+/g;
+            const REGEX_GLOBAL_METHODNAME = /global\s+[\w\<\>\[\]\,\s]*\s*(\w+) *\([^\)]*\) *(\{?|[^;])/g;
             const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
             const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
             const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
             const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
             const REGEX_SPACES_EXTREMES = /^[\t\n ]*|[\t\n ]*$/g;
             var globalClasses = text.match(REGEX_GLOBAL_CLASSNAME);
+            var globalMethods = text.match(REGEX_GLOBAL_METHODNAME);
             var javadocComments = text.match(REGEX_JAVADOC);
             var javadocFileData = [];
+
+            __LOG__('globalClasses = ' + globalClasses);
+            __LOG__('globalMethods = ' + globalMethods);
 
             if (globalClasses) {
               globalClasses.forEach(function(globalClass) {
                 var lastObject = {
-                        name: globalClass
-                    };
-                javadocFileData.push(lastObject);
+                    name: "Class",
+                    text: globalClass
+                };
+                javadocFileData.push([lastObject]);
+              });
+            }
+
+            if (globalMethods) {
+              globalMethods.forEach(function(method) {
+                var lastObject = {
+                    name: "Method",
+                    text: method
+                };
+                javadocFileData.push([lastObject]);
               });
             }
 
@@ -82,6 +97,7 @@ module.exports = {
                     javadocFileData.push(javadocCommentData);
                 });
             }
+            __LOG__(JSON.stringify(javadocFileData));
             return javadocFileData;
         };
 
