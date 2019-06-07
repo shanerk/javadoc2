@@ -20,21 +20,28 @@ module.exports = {
             });
         };
 
+        function matchAll(str, regexp) {
+          let ret = [];
+          let result;
+          while (result = regexp.exec(str)) {
+            ret.push(result);
+          }
+          return ret;
+        }
+
         function extractJavadocData(text) {
-            const REGEX_GLOBAL_CLASSNAME= /global.*class ([A-Z][a-z])\w+/g;
-            const REGEX_GLOBAL_METHODNAME = /global\s+[\w\<\>\[\]\,\s]*\s*(\w+) *\([^\)]*\) *(\{?|[^;])/g;
+            const REGEX_GLOBAL_CLASSNAME= /^\s*global.*class *([A-Z][a-z])\w+/g;
+            const REGEX_GLOBAL_METHODNAME = /^\s*global\s+[\w\<\>\[\]\,\s]*\s*(\w+) *\([^\)]*\) *(?:\{?|[^;])/gm;
             const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
             const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
             const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
             const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
             const REGEX_SPACES_EXTREMES = /^[\t\n ]*|[\t\n ]*$/g;
-            var globalClasses = text.match(REGEX_GLOBAL_CLASSNAME);
-            var globalMethods = text.match(REGEX_GLOBAL_METHODNAME);
+            var globalClasses = matchAll(text, REGEX_GLOBAL_CLASSNAME);
+            var globalMethods = matchAll(text, REGEX_GLOBAL_METHODNAME);
             var javadocComments = text.match(REGEX_JAVADOC);
             var javadocFileData = [];
 
-            __LOG__('globalClasses = ' + globalClasses);
-            __LOG__('globalMethods = ' + globalMethods);
 
             if (globalClasses) {
               globalClasses.forEach(function(globalClass) {
@@ -48,6 +55,7 @@ module.exports = {
 
             if (globalMethods) {
               globalMethods.forEach(function(method) {
+                __LOG__('method = ' + method);
                 var lastObject = {
                     name: "Method",
                     text: method
@@ -134,8 +142,6 @@ module.exports = {
             if (options.format === "markdown") {
                 data = "";
                 for (var file in docComments) {
-                    // data += "----\n\n";
-                    // data += `##### File: ${file}\n\n`;
                     var docCommentsFile = docComments[file];
                     for (var a = 0; a < docCommentsFile.length; a++) {
                         var commentData = docCommentsFile[a];
