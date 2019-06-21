@@ -1,11 +1,11 @@
 #! /usr/bin/env node
 
 const args = require("yargs")
-	.version("1.0.6")
+	.version("1.0.7")
 	.option("include", {
 		type: "array",
 		alias: "i",
-		default: ["**/*.js"],
+		default: ["**/*.cls"],
 		describe: "Include a new glob pattern (as input).",
 		help: "help"
 	})
@@ -19,7 +19,7 @@ const args = require("yargs")
 	.option("format", {
 		type: "string",
 		alias: "f",
-		default: "json",
+		default: "markdown",
 		describe: "Format of the output. Options: 'markdown' | 'json'.",
 		help: "help"
 	})

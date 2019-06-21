@@ -1,14 +1,24 @@
 module.exports = {
     generate: function generate(optionsArg) {
         var options = undefined;
+        var methodData;
+        var classData;
+
+        // Main
+        return (function() {
+            normalizeOptions();
+            var comments = iterateFiles();
+            var data = formatData(comments);
+            return data;
+        })();
 
         function normalizeOptions() {
             // Normalize arguments:
             options = Object.assign({
-                include: ["**/*.js"],
+                include: ["**/*.cls"],
                 exclude: ["**/node_modules/**/*"],
                 output: undefined,
-                format: "json"
+                format: "markdown"
             }, optionsArg);
             hasOutput = options.output;
             // Negate all the excluded patterns:
@@ -30,43 +40,33 @@ module.exports = {
         }
 
         function extractJavadocData(text) {
-            const REGEX_GLOBAL_CLASSNAME= /^\s*global.*class *([A-Z][a-z])\w+/g;
-            const REGEX_GLOBAL_METHODNAME = /^\s*global\s+[\w\<\>\[\]\,\s]*\s*(\w+) *\([^\)]*\) *(?:\{?|[^;])/gm;
-            const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
+            const REGEX_CLASS_SIG = /^\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])\s*$/gm;
+            const REGEX_METHOD_SIG = /(\/\*\*[\s\S]*?\*\/)\s*(?:\@[\w]+)*\s*([\w]*)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])\s*$/gm;
+            //const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
             const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
             const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
             const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
             const REGEX_SPACES_EXTREMES = /^[\t\n ]*|[\t\n ]*$/g;
-            var globalClasses = matchAll(text, REGEX_GLOBAL_CLASSNAME);
-            var globalMethods = matchAll(text, REGEX_GLOBAL_METHODNAME);
-            var javadocComments = text.match(REGEX_JAVADOC);
+            classData = matchAll(text, REGEX_CLASS_SIG);
+            methodData = matchAll(text, REGEX_METHOD_SIG);
+            //var javadocComments = text.match(REGEX_JAVADOC);
             var javadocFileData = [];
 
-
-            if (globalClasses) {
-              globalClasses.forEach(function(globalClass) {
+            if (classData) {
+              classData.forEach(function(classSignature) {
                 var lastObject = {
                     name: "Class",
-                    text: globalClass
+                    text: classSignature[1] + ' ' +
+                        classSignature[3] + '()'
                 };
                 javadocFileData.push([lastObject]);
               });
             }
 
-            if (globalMethods) {
-              globalMethods.forEach(function(method) {
-                __LOG__('method = ' + method);
-                var lastObject = {
-                    name: "Method",
-                    text: method
-                };
-                javadocFileData.push([lastObject]);
-              });
-            }
-
-            if (javadocComments) {
-                javadocComments.forEach(function(javadocComment) {
-                    var javadocCommentClean = "\n" + javadocComment.replace(REGEX_BEGINING_AND_ENDING, "");
+            if (methodData) {
+                var i = 0;
+                methodData.forEach(function(javadocMethod) {
+                    var javadocCommentClean = "\n" + javadocMethod[1].replace(REGEX_BEGINING_AND_ENDING, "");
                     var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
                     var javadocCommentData = [];
                     var attributeMatch = "default";
@@ -101,13 +101,25 @@ module.exports = {
                                 });
                         }
                     });
+                    javadocFileData.push([getMethod(javadocMethod)]);
                     javadocCommentData.push(lastObject);
                     javadocFileData.push(javadocCommentData);
                 });
             }
-            __LOG__(JSON.stringify(javadocFileData));
             return javadocFileData;
         };
+
+        function getMethod(javadocMethod) {
+            var methodSig = {
+                name: "Method",
+                text: javadocMethod[2] + ' ' +
+                    javadocMethod[3] + ' ' +
+                    javadocMethod[4] + ' ' +
+                    javadocMethod[5] +
+                    javadocMethod[6]
+            };
+            return methodSig;
+        }
 
         function __DBG__(msg) {
             /*
@@ -157,6 +169,9 @@ module.exports = {
                                 if (name !== "Default") {
                                     data += `**${name}:**`;
                                 }
+                                if (name === 'Method' || name === 'Class') {
+                                    text = `\`${text}\``;
+                                }
                                 data += ` ${text}\n\n`;
                             })(commentData);
                         }
@@ -188,7 +203,7 @@ module.exports = {
             return data;
         };
 
-        function extractComments() {
+        function iterateFiles() {
             const globule = require("globule");
             const fs = require("fs");
             var docComments = {};
@@ -210,12 +225,5 @@ module.exports = {
             }
             return docComments;
         };
-
-        return (function() {
-            normalizeOptions();
-            var comments = extractComments();
-            var data = formatData(comments);
-            return data;
-        })();
     }
 };
