@@ -80,19 +80,19 @@ module.exports = {
         function parseData(javadocData, entityType) {
             var javadocFileDataLines = [];
             javadocData.forEach(function(javadocEntity) {
-                // if (entityType === ENTITY_TYPE.CLASS_ENTITY) {
-                //     if (javadocEntity[0].indexOf('@IsTest') !== -1) {
-                //         currentClassIsTest = true;
-                //         return;
-                //     } else {
-                //         currentClassIsTest = false;
-                //     }
-                // }
-                // if (entityType === ENTITY_TYPE.METHOD_ENTITY) {
-                //     if (javadocEntity[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
-                //         return;
-                //     }
-                // }
+                if (entityType === ENTITY_TYPE.CLASS_ENTITY) {
+                    if (javadocEntity[0].indexOf('@IsTest') !== -1) {
+                        currentClassIsTest = true;
+                        return;
+                    } else {
+                        currentClassIsTest = false;
+                    }
+                }
+                if (entityType === ENTITY_TYPE.METHOD_ENTITY) {
+                    if (javadocEntity[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
+                        return;
+                    }
+                }
 
                 var entityHeader = getEntity(javadocEntity, entityType);
                 if (entityHeader !== undefined) javadocFileDataLines.push([entityHeader]);
@@ -148,21 +148,20 @@ module.exports = {
         function getMethod(javadocEntity) {
             var methodSig = {
                 name: "Method",
+                toc: javadocEntity[5] +
+                    javadocEntity[6],
                 text: javadocEntity[3] + ' ' +
                     javadocEntity[4] + ' ' +
                     javadocEntity[5] +
                     javadocEntity[6]
             };
-            // Escape < > chars for markdown rendering
-            methodSig.text = methodSig.text.replace(/([\<\>])/g, function(match) {
-                return `\\${match}`
-            });
             return methodSig;
         }
 
         function getClass(javadocEntity) {
             var classSig = {
                 name: "Class",
+                toc: javadocEntity[5],
                 text: javadocEntity[5]
             };
             return classSig;
@@ -171,9 +170,16 @@ module.exports = {
         function getClassNoDocs(javadocEntity) {
             var classSig = {
                 name: "Class",
+                toc: javadocEntity[4],
                 text: javadocEntity[4]
             };
             return classSig;
+        }
+
+        function escapeAngleBrackets(str) {
+            return str.replace(/([\<\>])/g, function(match) {
+                return `\\${match}`
+            });
         }
 
         function __DBG__(msg) {
@@ -212,17 +218,16 @@ module.exports = {
                             (function(commentData) {
                                 var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
+                                var toc = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
                                 if (name.length) {
                                     name = name[0].toUpperCase() + name.substr(1);
                                 }
                                 if (name === 'Class') {
-                                    tocData += (`\n1. [${text} class](#${text.replace(/\s/g, "-")}-class)`);
+                                    tocData += (`\n1. [${toc} class](#${toc.replace(/\s/g, "-")}-class)`);
                                     text = `\n---\n### ${text} class`;
                                 } else if (name === 'Method') {
-                                    var methodToc = text.substr(text.indexOf(" ", text.indexOf(" ") + 1) + 1);
-                                    // methodToc = methodToc.substr(0,methodToc.indexOf("("));
-                                    tocData += (`\n   * ${methodToc}`);
-                                    text = `#### ${text}`;
+                                    tocData += (`\n   * ${escapeAngleBrackets(toc)}`);
+                                    text = `#### ${escapeAngleBrackets(text)}`;
                                 } else if (name === "Param") {
                                     if (firstParam) {
                                         data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
