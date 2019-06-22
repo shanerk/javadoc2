@@ -6,7 +6,7 @@ module.exports = {
         var currentClassIsTest = undefined;
 
         const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\S]*?\*\/)\s*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
-        const REGEX_CLASS_ENTITIES_NODOC = /^(?:[ \t])*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/gm;
+        const REGEX_CLASS_ENTITIES_NODOC = /^(?:[ \t])*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/g;
         const REGEX_METHOD_ENTITIES = /[ \t]+(\/\*\*[\s\S]*?\*\/)\s*(?:\@[\w]+\s*)*\s*([\w]*)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
