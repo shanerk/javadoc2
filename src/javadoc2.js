@@ -1,14 +1,27 @@
 module.exports = {
     generate: function generate(optionsArg) {
         var options = undefined;
-        var methodData;
-        var classData;
+        var methodData = undefined;
+        var classData = undefined;
+        var currentClassIsTest = undefined;
+
+        const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\S]*?\*\/)\s*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
+        const REGEX_CLASS_ENTITIES_NODOC = /^(?:[ \t])*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/gm;
+        const REGEX_METHOD_ENTITIES = /[ \t]+(\/\*\*[\s\S]*?\*\/)\s*(?:\@[\w]+\s*)*\s*([\w]*)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
+        const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
+        const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
+        const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
+
+        const ENTITY_TYPE = {
+            CLASS_ENTITY: 1,
+            METHOD_ENTITY: 2
+        }
 
         // Main
         return (function() {
             normalizeOptions();
-            var comments = iterateFiles();
-            var data = formatData(comments);
+            var raw = iterateFiles();
+            var data = formatData(raw);
             return data;
         })();
 
@@ -40,33 +53,47 @@ module.exports = {
         }
 
         function extractJavadocData(text) {
-            const REGEX_CLASS_SIG = /^\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])\s*$/gm;
-            const REGEX_METHOD_SIG = /(\/\*\*[\s\S]*?\*\/)\s*(?:\@[\w]+)*\s*([\w]*)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])\s*$/gm;
-            //const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
-            const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
-            const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
-            const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
-            const REGEX_SPACES_EXTREMES = /^[\t\n ]*|[\t\n ]*$/g;
-            classData = matchAll(text, REGEX_CLASS_SIG);
-            methodData = matchAll(text, REGEX_METHOD_SIG);
-            //var javadocComments = text.match(REGEX_JAVADOC);
             var javadocFileData = [];
 
+            classData = matchAll(text, REGEX_CLASS_ENTITIES);
+            // No Javadoc?  No Problem!
+            if (classData.length === 0) classData = matchAll(text, REGEX_CLASS_ENTITIES_NODOC);
+            __LOG__('Class matches: ' + classData.length);
             if (classData) {
-              classData.forEach(function(classSignature) {
-                var lastObject = {
-                    name: "Class",
-                    text: classSignature[1] + ' ' +
-                        classSignature[3] + '()'
-                };
-                javadocFileData.push([lastObject]);
-              });
+                javadocFileData = parseData(classData, ENTITY_TYPE.CLASS_ENTITY);
             }
 
+            methodData = matchAll(text, REGEX_METHOD_ENTITIES);
+            __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
-                var i = 0;
-                methodData.forEach(function(javadocMethod) {
-                    var javadocCommentClean = "\n" + javadocMethod[1].replace(REGEX_BEGINING_AND_ENDING, "");
+                javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD_ENTITY));
+            }
+            __LOG__("javadocFileData: " + JSON.stringify(javadocFileData));
+            return javadocFileData;
+        };
+
+        function parseData(javadocData, entityType) {
+            var javadocFileDataLines = [];
+            javadocData.forEach(function(javadocEntity) {
+                // if (entityType === ENTITY_TYPE.CLASS_ENTITY) {
+                //     if (javadocEntity[0].indexOf('@IsTest') !== -1) {
+                //         currentClassIsTest = true;
+                //         return;
+                //     } else {
+                //         currentClassIsTest = false;
+                //     }
+                // }
+                // if (entityType === ENTITY_TYPE.METHOD_ENTITY) {
+                //     if (javadocEntity[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
+                //         return;
+                //     }
+                // }
+
+                var entityHeader = getEntity(javadocEntity, entityType);
+                if (entityHeader !== undefined) javadocFileDataLines.push([entityHeader]);
+
+                if (javadocEntity[1] !== undefined) {
+                    var javadocCommentClean = "\n" + javadocEntity[1].replace(REGEX_BEGINING_AND_ENDING, "");
                     var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
                     var javadocCommentData = [];
                     var attributeMatch = "default";
@@ -74,14 +101,12 @@ module.exports = {
                         name: "default",
                         text: ""
                     };
-                    // __DBG__("JAVADOC", javadocLines);
                     javadocLines.forEach(function(javadocLine) {
                         var attrMatch = javadocLine.match(REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE);
                         var isNewMatch = (!!attrMatch);
                         if (isNewMatch) {
                             attributeMatch = attrMatch[0].replace(/_/g, " ");
                         }
-                        // __DBG__("Javadoc line:", isNewMatch, attributeMatch, javadocLine);
                         if (isNewMatch) {
                             javadocCommentData.push(lastObject);
                             lastObject = {
@@ -101,24 +126,36 @@ module.exports = {
                                 });
                         }
                     });
-                    javadocFileData.push([getMethod(javadocMethod)]);
                     javadocCommentData.push(lastObject);
-                    javadocFileData.push(javadocCommentData);
-                });
-            }
-            return javadocFileData;
-        };
+                    javadocFileDataLines.push(javadocCommentData);
+                }
+            });
+            return javadocFileDataLines;
+        }
 
-        function getMethod(javadocMethod) {
+        function getEntity(javadocEntity, entityType) {
+            if (entityType == ENTITY_TYPE.CLASS_ENTITY) return getClass(javadocEntity);
+            if (entityType == ENTITY_TYPE.METHOD_ENTITY) return getMethod(javadocEntity);
+            return undefined;
+        }
+
+        function getMethod(javadocEntity) {
             var methodSig = {
                 name: "Method",
-                text: javadocMethod[2] + ' ' +
-                    javadocMethod[3] + ' ' +
-                    javadocMethod[4] + ' ' +
-                    javadocMethod[5] +
-                    javadocMethod[6]
+                text: javadocEntity[3] + ' ' +
+                    javadocEntity[4] + ' ' +
+                    javadocEntity[5] +
+                    javadocEntity[6]
             };
             return methodSig;
+        }
+
+        function getClass(javadocEntity) {
+            var classSig = {
+                name: "Class",
+                text: javadocEntity[5]
+            };
+            return classSig;
         }
 
         function __DBG__(msg) {
@@ -136,14 +173,7 @@ module.exports = {
             }
             var otherArgs = Array.prototype.slice.call(arguments);
             otherArgs.shift();
-            // Not needed right now, avoided for branch coverage:
-            //if (typeof msg === "string") {
-            console.log.apply(console, ["[javadoc] " + msg].concat(otherArgs));
-            //}
-            //else {
-            //		console.log.apply(console, ["[javadoc]", msg].concat(otherArgs));
-            //}
-            //*/
+            console.log.apply(console, ["[javadoc2] " + msg].concat(otherArgs));
         };
 
         function formatData(docComments) {
@@ -152,32 +182,51 @@ module.exports = {
             const mkdirp = require('mkdirp');
             var data = undefined;
             if (options.format === "markdown") {
+                var tocData = "";
                 data = "";
                 for (var file in docComments) {
                     var docCommentsFile = docComments[file];
                     for (var a = 0; a < docCommentsFile.length; a++) {
                         var commentData = docCommentsFile[a];
+                        var firstParam = true;
+                        __LOG__("commentData: " + commentData);
+                        if (commentData === null) break;
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
-                                __DBG__("Comment data:", commentData[b]);
-                                var name = commentData[b].name.replace(/^@/g, "");
-                                var text = commentData[b].text;
+                                var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
+                                var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
                                 if (name.length) {
                                     name = name[0].toUpperCase() + name.substr(1);
                                 }
-                                __DBG__("Name: " + name);
-                                if (name !== "Default") {
-                                    data += `**${name}:**`;
+                                if (name === 'Class') {
+                                    tocData += (`\n1. [${text} class](#${text.replace(/\s/g, "-")}-class)`);
+                                    text = `\n---\n### ${text} class`;
+                                } else if (name === 'Method') {
+                                    var methodToc = text.split(" ")[2];
+                                    tocData += (`\n   * ${methodToc.substr(0,methodToc.indexOf("("))}`);
+                                    text = `#### ${text}`;
+                                } else if (name === "Param") {
+                                    if (firstParam) {
+                                        data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
+                                        firstParam = false;
+                                    }
+                                    var pname = text.substr(0, text.indexOf(" "));
+                                    var descrip = text.substr(text.indexOf(" "));
+                                    text = `|${name}|${pname}|${descrip}|`;
+                                } else if (name === "Return") {
+                                    if (firstParam) {
+                                        data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
+                                        firstParam = false;
+                                    }
+                                    text = `|${name}|n/a|${text}|`;
                                 }
-                                if (name === 'Method' || name === 'Class') {
-                                    text = `\`${text}\``;
-                                }
-                                data += ` ${text}\n\n`;
+                                data += `${text}\n`;
                             })(commentData);
                         }
-                        data += "\n\n";
                     }
+                    data += "\n";
                 }
+                data = "# API Reference\n" + tocData + "\n" + data;
             } else {
                 data = JSON.stringify(docComments, null, 4);
             }

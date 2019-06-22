@@ -8,15 +8,27 @@ Simple tool to generate JSON or Markdown text from javadoc2 comments.
 
 ## 1. Installation
 
-`~$ npm install -s javadoc2`
+From within the repo folder:
+
+`~$ npm install -s`
 
 To use the CLI anywhere, install it globally:
 
-`~$ npm install -g javadoc2`
+`~$ npm install -g`
 
 To see the help, run:
 
 `javadoc2 --help`
+
+If the above doesn't work, your Node bin path is probably wrong or missing.  Find what it should be as follows:
+
+`node -pe process.execPath`
+
+Result will look like this: `/usr/local/Cellar/node/10.5.0/bin/node`
+
+Add it to your PATH, for instance within `~\.bash-profile` like so:
+
+`export PATH=$PATH:/usr/local/Cellar/node/10.5.0/bin`
 
 ## 2. Specify javadoc2 comments
 
