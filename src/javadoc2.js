@@ -14,7 +14,8 @@ module.exports = {
 
         const ENTITY_TYPE = {
             CLASS_ENTITY: 1,
-            METHOD_ENTITY: 2
+            METHOD_ENTITY: 2,
+            CLASS_ENTITY_NODOCS: 3
         }
 
         // Main
@@ -56,19 +57,23 @@ module.exports = {
             var javadocFileData = [];
 
             classData = matchAll(text, REGEX_CLASS_ENTITIES);
-            // No Javadoc?  No Problem!
-            if (classData.length === 0) classData = matchAll(text, REGEX_CLASS_ENTITIES_NODOC);
-            __LOG__('Class matches: ' + classData.length);
-            if (classData) {
+
+            if (classData.length !== 0) {
                 javadocFileData = parseData(classData, ENTITY_TYPE.CLASS_ENTITY);
+            } else {
+                // No Javadoc?  No Problem!
+                classData = matchAll(text, REGEX_CLASS_ENTITIES_NODOC);
+                if (classData) {
+                    javadocFileData = parseData(classData, ENTITY_TYPE.CLASS_ENTITY_NODOCS);
+                }
             }
+            __LOG__('Class matches: ' + classData.length);
 
             methodData = matchAll(text, REGEX_METHOD_ENTITIES);
             __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
                 javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD_ENTITY));
             }
-            __LOG__("javadocFileData: " + JSON.stringify(javadocFileData));
             return javadocFileData;
         };
 
@@ -135,6 +140,7 @@ module.exports = {
 
         function getEntity(javadocEntity, entityType) {
             if (entityType == ENTITY_TYPE.CLASS_ENTITY) return getClass(javadocEntity);
+            if (entityType == ENTITY_TYPE.CLASS_ENTITY_NODOCS) return getClassNoDocs(javadocEntity);
             if (entityType == ENTITY_TYPE.METHOD_ENTITY) return getMethod(javadocEntity);
             return undefined;
         }
@@ -147,6 +153,10 @@ module.exports = {
                     javadocEntity[5] +
                     javadocEntity[6]
             };
+            // Escape < > chars for markdown rendering
+            methodSig.text = methodSig.text.replace(/([\<\>])/g, function(match) {
+                return `\\${match}`
+            });
             return methodSig;
         }
 
@@ -154,6 +164,14 @@ module.exports = {
             var classSig = {
                 name: "Class",
                 text: javadocEntity[5]
+            };
+            return classSig;
+        }
+
+        function getClassNoDocs(javadocEntity) {
+            var classSig = {
+                name: "Class",
+                text: javadocEntity[4]
             };
             return classSig;
         }
@@ -189,7 +207,6 @@ module.exports = {
                     for (var a = 0; a < docCommentsFile.length; a++) {
                         var commentData = docCommentsFile[a];
                         var firstParam = true;
-                        __LOG__("commentData: " + commentData);
                         if (commentData === null) break;
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
@@ -202,8 +219,9 @@ module.exports = {
                                     tocData += (`\n1. [${text} class](#${text.replace(/\s/g, "-")}-class)`);
                                     text = `\n---\n### ${text} class`;
                                 } else if (name === 'Method') {
-                                    var methodToc = text.split(" ")[2];
-                                    tocData += (`\n   * ${methodToc.substr(0,methodToc.indexOf("("))}`);
+                                    var methodToc = text.substr(text.indexOf(" ", text.indexOf(" ") + 1) + 1);
+                                    // methodToc = methodToc.substr(0,methodToc.indexOf("("));
+                                    tocData += (`\n   * ${methodToc}`);
                                     text = `#### ${text}`;
                                 } else if (name === "Param") {
                                     if (firstParam) {
@@ -267,7 +285,7 @@ module.exports = {
                 var file = files[a];
                 var contents = fs.readFileSync(file).toString();
                 var javadocMatches = extractJavadocData(contents);
-                __LOG__("Matches in file " + file + ": " + javadocMatches.length);
+                __LOG__("Matched lines in file " + file + ": " + javadocMatches.length);
                 if (javadocMatches.length !== 0) {
                     docComments[file] = javadocMatches;
                 }
