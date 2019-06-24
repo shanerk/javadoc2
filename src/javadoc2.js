@@ -14,6 +14,8 @@ module.exports = {
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
 
+        const STR_TODO = "TODO: Add documentation for this entity.";
+
         const ENTITY_TYPE = {
             CLASS_ENTITY: 1,
             METHOD_ENTITY: 2,
@@ -76,7 +78,7 @@ module.exports = {
                 matchAll(text, REGEX_METHOD_ENTITIES_NODOC),
                 5,
                 5
-            );
+            ).sort(MethodComparator);
 
             __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
@@ -97,6 +99,12 @@ module.exports = {
             });
             return list1;
         }
+
+        function MethodComparator(a, b) {
+            if (a[5] < b[5]) return -1;
+            if (a[5] > b[5]) return 1;
+            return 0;
+          }
 
         function parseData(javadocData, entityType) {
             var javadocFileDataLines = [];
@@ -152,8 +160,11 @@ module.exports = {
                                 });
                         }
                     });
+                    if (lastObject.text.replace(/\s/g, "") === "") lastObject.text = STR_TODO;
                     javadocCommentData.push(lastObject);
                     javadocFileDataLines.push(javadocCommentData);
+                } else {
+                    javadocFileDataLines.push([{text: STR_TODO}]);
                 }
             });
             return javadocFileDataLines;
