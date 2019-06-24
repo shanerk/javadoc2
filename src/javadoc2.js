@@ -2,9 +2,9 @@ module.exports = {
     generate: function generate(optionsArg) {
         var options = undefined;
         var methodData = undefined;
-        var methodDataNoDoc = undefined;
         var classData = undefined;
         var currentClassIsTest = undefined;
+        var isIgnorePrivate = true;
 
         const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\w*{}()!@#$%^&*+-=|\[\];:<>,./`]*?\*\/)\s*(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
         const REGEX_CLASS_ENTITIES_NODOC = /(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/gm;
@@ -80,12 +80,26 @@ module.exports = {
                 5
             ).sort(MethodComparator);
 
+            methodData = filter(methodData);
+
             __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
                 javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD_ENTITY));
             }
             return javadocFileData;
         };
+
+        function filter(data) {
+            var ret = [];
+            data.forEach(function(item) {
+                var include = true;
+                if (isIgnorePrivate && item[2] === "private") {
+                    include = false;
+                }
+                if (include) ret.push(item);
+            });
+            return ret;
+        }
 
         function merge(list1, list2, key1, key2) {
             var keys = [];
