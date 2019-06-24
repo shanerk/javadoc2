@@ -75,7 +75,7 @@ module.exports = {
                 matchAll(text, REGEX_METHOD_ENTITIES),
                 matchAll(text, REGEX_METHOD_ENTITIES_NODOC),
                 5,
-                4
+                5
             );
 
             __LOG__('Method matches: ' + methodData.length);
