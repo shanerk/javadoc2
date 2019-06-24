@@ -2,12 +2,14 @@ module.exports = {
     generate: function generate(optionsArg) {
         var options = undefined;
         var methodData = undefined;
+        var methodDataNoDoc = undefined;
         var classData = undefined;
         var currentClassIsTest = undefined;
 
-        const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\S]*?\*\/)\s*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
-        const REGEX_CLASS_ENTITIES_NODOC = /^(?:[ \t])*(\@[\w]+\s*)*\s*([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/g;
-        const REGEX_METHOD_ENTITIES = /[ \t]+(\/\*\*[\s\S]*?\*\/)\s*(?:\@[\w]+\s*)*\s*([\w]*)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
+        const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\w*{}()!@#$%^&*+-=|\[\];:<>,./`]*?\*\/)\s*(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
+        const REGEX_CLASS_ENTITIES_NODOC = /(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/gm;
+        const REGEX_METHOD_ENTITIES = /[ \t](\/\*\*[\s\w*{}()!@#$%^&*+-=|\[\];:<>,./`]*?\*\/)\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
+        const REGEX_METHOD_ENTITIES_NODOC = /([ \t])(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
@@ -69,13 +71,32 @@ module.exports = {
             }
             __LOG__('Class matches: ' + classData.length);
 
-            methodData = matchAll(text, REGEX_METHOD_ENTITIES);
+            methodData = merge(
+                matchAll(text, REGEX_METHOD_ENTITIES),
+                matchAll(text, REGEX_METHOD_ENTITIES_NODOC),
+                5,
+                4
+            );
+
             __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
                 javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD_ENTITY));
             }
             return javadocFileData;
         };
+
+        function merge(list1, list2, key1, key2) {
+            var keys = [];
+            list1.forEach(function(item) {
+                keys.push(item[key1]);
+            });
+            list2.forEach(function(item) {
+                if (!keys.includes(item[key2])) {
+                    list1.push(item);
+                }
+            });
+            return list1;
+        }
 
         function parseData(javadocData, entityType) {
             var javadocFileDataLines = [];
@@ -224,7 +245,7 @@ module.exports = {
                                 }
                                 if (name === 'Class') {
                                     tocData += (`\n1. [${toc} class](#${toc.replace(/\s/g, "-")}-class)`);
-                                    text = `\n---\n### ${text} class`;
+                                    text = `\n---\n### ${text} class (${file})`;
                                 } else if (name === 'Method') {
                                     tocData += (`\n   * ${escapeAngleBrackets(toc)}`);
                                     text = `#### ${escapeAngleBrackets(text)}`;
