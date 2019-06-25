@@ -2,24 +2,29 @@ module.exports = {
     generate: function generate(optionsArg) {
         var options = undefined;
         var methodData = undefined;
+        var propertyData = undefined;
         var classData = undefined;
         var currentClassIsTest = undefined;
         var isIgnorePrivate = true;
 
-        const REGEX_CLASS_ENTITIES = /(\/\*\*[\s\w*{}()!@#$%^&*+-=|\[\];:<>,./`]*?\*\/)\s*(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*$/gm;
-        const REGEX_CLASS_ENTITIES_NODOC = /(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+class\s*([\w\d]+)\s*(?:[{])[ \t]*/gm;
-        const REGEX_METHOD_ENTITIES = /[ \t](\/\*\*[\s\w*{}()!@#$%^&*+-=|\[\];:<>,./`]*?\*\/)\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
-        const REGEX_METHOD_ENTITIES_NODOC = /([ \t])(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\d\<\>\[\]\,\s]+)\s([\w\d]+)\s*(\([^\)]*\))\s*(?:[{])[ \t]*$/gm;
+        const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
+
+        const REGEX_CLASS = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+(?:class|enum)+\s*([\w]+)\s*(?:[{])[ \t]*$/gm;
+        const REGEX_CLASS_NODOC = /(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+(?:class|enum)+\s*([\w]+)\s*(?:[{])[ \t]*/gm;
+        const REGEX_METHOD = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
+        const REGEX_METHOD_NODOC = /([ \t])*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
+        const REGEX_PROPERTY = /(?:[ \t])+(\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*((=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
 
-        const STR_TODO = "TODO: Add documentation for this entity.";
+        const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
 
         const ENTITY_TYPE = {
-            CLASS_ENTITY: 1,
-            METHOD_ENTITY: 2,
-            CLASS_ENTITY_NODOCS: 3
+            _CLASS: 1,
+            _METHOD: 2,
+            _CLASSNODOCS: 3,
+            _PROPERTY: 4
         }
 
         // Main
@@ -60,31 +65,40 @@ module.exports = {
         function extractJavadocData(text) {
             var javadocFileData = [];
 
-            classData = matchAll(text, REGEX_CLASS_ENTITIES);
-
-            if (classData.length !== 0) {
-                javadocFileData = parseData(classData, ENTITY_TYPE.CLASS_ENTITY);
-            } else {
-                // No Javadoc?  No Problem!
-                classData = matchAll(text, REGEX_CLASS_ENTITIES_NODOC);
-                if (classData) {
-                    javadocFileData = parseData(classData, ENTITY_TYPE.CLASS_ENTITY_NODOCS);
-                }
-            }
+            // Handle Classes
+            classData = matchAll(text, REGEX_CLASS);
             __LOG__('Class matches: ' + classData.length);
 
+            if (classData.length !== 0) {
+                javadocFileData = parseData(classData, ENTITY_TYPE._CLASS);
+            } else {
+                // No Javadoc?  No Problem!
+                classData = matchAll(text, REGEX_CLASS_NODOC);
+                if (classData) {
+                    javadocFileData = parseData(classData, ENTITY_TYPE._CLASSNODOCS);
+                }
+            }
+
+            // Handle Properties
+            propertyData = matchAll(text, REGEX_PROPERTY);
+            __LOG__('Property matches: ' + propertyData.length);
+
+            if (propertyData) {
+                javadocFileData = javadocFileData.concat(parseData(propertyData, ENTITY_TYPE._PROPERTY));
+            }
+
+            // Handle Methods
             methodData = merge(
-                matchAll(text, REGEX_METHOD_ENTITIES),
-                matchAll(text, REGEX_METHOD_ENTITIES_NODOC),
+                matchAll(text, REGEX_METHOD),
+                matchAll(text, REGEX_METHOD_NODOC),
                 5,
                 5
             ).sort(MethodComparator);
 
             methodData = filter(methodData);
-
             __LOG__('Method matches: ' + methodData.length);
             if (methodData) {
-                javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD_ENTITY));
+                javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE._METHOD));
             }
             return javadocFileData;
         };
@@ -101,17 +115,17 @@ module.exports = {
             return ret;
         }
 
-        function merge(list1, list2, key1, key2) {
+        function merge(data1, data2, key1, key2) {
             var keys = [];
-            list1.forEach(function(item) {
+            data1.forEach(function(item) {
                 keys.push(item[key1]);
             });
-            list2.forEach(function(item) {
+            data2.forEach(function(item) {
                 if (!keys.includes(item[key2])) {
-                    list1.push(item);
+                    data1.push(item);
                 }
             });
-            return list1;
+            return data1;
         }
 
         function MethodComparator(a, b) {
@@ -123,7 +137,7 @@ module.exports = {
         function parseData(javadocData, entityType) {
             var javadocFileDataLines = [];
             javadocData.forEach(function(javadocEntity) {
-                if (entityType === ENTITY_TYPE.CLASS_ENTITY) {
+                if (entityType === ENTITY_TYPE._CLASS) {
                     if (javadocEntity[0].indexOf('@IsTest') !== -1) {
                         currentClassIsTest = true;
                         return;
@@ -131,7 +145,7 @@ module.exports = {
                         currentClassIsTest = false;
                     }
                 }
-                if (entityType === ENTITY_TYPE.METHOD_ENTITY) {
+                if (entityType === ENTITY_TYPE._METHOD) {
                     if (javadocEntity[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
                         return;
                     }
@@ -140,8 +154,8 @@ module.exports = {
                 var entityHeader = getEntity(javadocEntity, entityType);
                 if (entityHeader !== undefined) javadocFileDataLines.push([entityHeader]);
 
-                if (javadocEntity[1] !== undefined) {
-                    var javadocCommentClean = "\n" + javadocEntity[1].replace(REGEX_BEGINING_AND_ENDING, "");
+                if (javadocEntity[0].match(REGEX_JAVADOC) !== null) {
+                    var javadocCommentClean = "\n" + javadocEntity[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
                     var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
                     var javadocCommentData = [];
                     var attributeMatch = "default";
@@ -174,52 +188,69 @@ module.exports = {
                                 });
                         }
                     });
-                    if (lastObject.text.replace(/\s/g, "") === "") lastObject.text = STR_TODO;
+                    if (lastObject.text.replace(/\s/g, "") === "") {
+                        lastObject.text = STR_TODO.replace("_ENTITY_", "WASSUP?");
+                    }
                     javadocCommentData.push(lastObject);
                     javadocFileDataLines.push(javadocCommentData);
-                } else {
-                    javadocFileDataLines.push([{text: STR_TODO}]);
+                } else if (entityType === ENTITY_TYPE._CLASSNODOCS) {
+                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", "class")}]);
+                } else if (entityType === ENTITY_TYPE._METHOD) {
+                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", "method")}]);
                 }
             });
             return javadocFileDataLines;
         }
 
-        function getEntity(javadocEntity, entityType) {
-            if (entityType == ENTITY_TYPE.CLASS_ENTITY) return getClass(javadocEntity);
-            if (entityType == ENTITY_TYPE.CLASS_ENTITY_NODOCS) return getClassNoDocs(javadocEntity);
-            if (entityType == ENTITY_TYPE.METHOD_ENTITY) return getMethod(javadocEntity);
+        function getEntity(e, t) {
+            if (t === ENTITY_TYPE._CLASS) return getClass(e);
+            if (t === ENTITY_TYPE._CLASSNODOCS) return getClassNoDocs(e);
+            if (t === ENTITY_TYPE._METHOD) return getMethod(e);
+            if (t === ENTITY_TYPE._PROPERTY) return getProp(e);
             return undefined;
         }
 
-        function getMethod(javadocEntity) {
-            var methodSig = {
+        function getProp(e) {
+
+            var ret = {
+                name: "Property",
+                toc: e[5],
+                text: e[5],
+                type: e[4],
+                static: e[3] === "static"
+            };
+            return ret;
+        }
+
+        function getMethod(e) {
+            var ret = {
                 name: "Method",
-                toc: javadocEntity[5] +
-                    javadocEntity[6],
-                text: javadocEntity[3] + ' ' +
-                    javadocEntity[4] + ' ' +
-                    javadocEntity[5] +
-                    javadocEntity[6]
+                toc: e[5] + e[6],
+                text: e[3] + ' ' +
+                    e[4] + ' ' +
+                    e[5] +
+                    e[6]
             };
-            return methodSig;
+            return ret;
         }
 
-        function getClass(javadocEntity) {
-            var classSig = {
+        function getClass(e) {
+            var ret = {
                 name: "Class",
-                toc: javadocEntity[5],
-                text: javadocEntity[5]
+                toc: e[5],
+                text: e[5]
             };
-            return classSig;
+            __LOG__('ret = ' + ret);
+            return ret;
         }
 
-        function getClassNoDocs(javadocEntity) {
-            var classSig = {
+        function getClassNoDocs(e) {
+            var ret = {
                 name: "Class",
-                toc: javadocEntity[4],
-                text: javadocEntity[4]
+                toc: e[4],
+                text: e[4]
             };
-            return classSig;
+            return ret;
         }
 
         function escapeAngleBrackets(str) {
@@ -256,6 +287,7 @@ module.exports = {
                 data = "";
                 for (var file in docComments) {
                     var docCommentsFile = docComments[file];
+                    var firstProp = true;
                     for (var a = 0; a < docCommentsFile.length; a++) {
                         var commentData = docCommentsFile[a];
                         var firstParam = true;
@@ -264,7 +296,9 @@ module.exports = {
                             (function(commentData) {
                                 var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
+                                var type = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
                                 var toc = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
+
                                 if (name.length) {
                                     name = name[0].toUpperCase() + name.substr(1);
                                 }
@@ -288,6 +322,15 @@ module.exports = {
                                         firstParam = false;
                                     }
                                     text = `|${name}|n/a|${text}|`;
+                                } else if (name === "Property") {
+                                    if (firstProp) {
+                                        data += '\n####Properties\n|Static?|Type|Property|\n|:---|:---|:---|\n';
+                                        firstProp = false;
+                                    }
+                                    var static = commentData[b].static ? "Yes" : " ";
+                                    text = `|${static}|${type}|${text}|`;
+                                } else if (name === "Author") {
+                                    text = "";
                                 }
                                 data += `${text}\n`;
                             })(commentData);
