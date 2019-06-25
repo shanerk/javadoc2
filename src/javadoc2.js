@@ -17,6 +17,7 @@ module.exports = {
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
+        const REGEX_JAVADOC_CODE_BLOCK = /{@code[\s\S]*\n}\n/g;
 
         const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
 
@@ -188,9 +189,6 @@ module.exports = {
                                 });
                         }
                     });
-                    if (lastObject.text.replace(/\s/g, "") === "") {
-                        lastObject.text = STR_TODO.replace("_ENTITY_", "WASSUP?");
-                    }
                     javadocCommentData.push(lastObject);
                     javadocFileDataLines.push(javadocCommentData);
                 } else if (entityType === ENTITY_TYPE._CLASSNODOCS) {
@@ -298,6 +296,14 @@ module.exports = {
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
                                 var type = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
                                 var toc = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
+                                var code = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                                //__LOG__("commentData[b].text = " + commentData[b].text);
+                                if (code.length > 0 && code[0] !== undefined) {
+                                    code = "" + code[0];
+                                    var stripped = code.replace(/\n/g, "");
+                                    __LOG__("code = " + stripped);
+                                    text = text.replace(stripped, "\n#####Example:\n```" + code.replace(/{@code|\n}\n/g, "") + "\n```\n");
+                                }
 
                                 if (name.length) {
                                     name = name[0].toUpperCase() + name.substr(1);
@@ -310,7 +316,7 @@ module.exports = {
                                     text = `#### ${escapeAngleBrackets(text)}`;
                                 } else if (name === "Param") {
                                     if (firstParam) {
-                                        data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
+                                        data += '\n#####Parameters:\n|Type|Name|Description|\n|:---|:---|:---|\n';
                                         firstParam = false;
                                     }
                                     var pname = text.substr(0, text.indexOf(" "));
