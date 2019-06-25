@@ -9,15 +9,16 @@ module.exports = {
 
         const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
 
-        const REGEX_CLASS = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+(?:class|enum)+\s*([\w]+)\s*(?:[{])[ \t]*$/gm;
-        const REGEX_CLASS_NODOC = /(\@[\w]+\s*)*\s*^([\w]+)\s*([\w\s]*)\s+(?:class|enum)+\s*([\w]+)\s*(?:[{])[ \t]*/gm;
+        //const REGEX_ENUM = /(\w)*[ \t]+enum[ \t]+(\w)*[ \t]*{/g;
+        const REGEX_CLASS = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
+        const REGEX_CLASS_NODOC = /(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_METHOD = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
         const REGEX_METHOD_NODOC = /([ \t])*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
         const REGEX_PROPERTY = /(?:[ \t])+(\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*((=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
-        const REGEX_JAVADOC_CODE_BLOCK = /{@code[\s\S]*\n}\n/g;
+        const REGEX_JAVADOC_CODE_BLOCK = /{@code[\s\S]*\n}/g;
 
         const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
 
@@ -135,11 +136,11 @@ module.exports = {
             return 0;
           }
 
-        function parseData(javadocData, entityType) {
+        function parseData(fileData, entityType) {
             var javadocFileDataLines = [];
-            javadocData.forEach(function(javadocEntity) {
+            fileData.forEach(function(data) {
                 if (entityType === ENTITY_TYPE._CLASS) {
-                    if (javadocEntity[0].indexOf('@IsTest') !== -1) {
+                    if (data[0].indexOf('@IsTest') !== -1) {
                         currentClassIsTest = true;
                         return;
                     } else {
@@ -147,16 +148,16 @@ module.exports = {
                     }
                 }
                 if (entityType === ENTITY_TYPE._METHOD) {
-                    if (javadocEntity[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
+                    if (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
                         return;
                     }
                 }
 
-                var entityHeader = getEntity(javadocEntity, entityType);
+                var entityHeader = getEntity(data, entityType);
                 if (entityHeader !== undefined) javadocFileDataLines.push([entityHeader]);
 
-                if (javadocEntity[0].match(REGEX_JAVADOC) !== null) {
-                    var javadocCommentClean = "\n" + javadocEntity[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
+                if (data[0].match(REGEX_JAVADOC) !== null) {
+                    var javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
                     var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
                     var javadocCommentData = [];
                     var attributeMatch = "default";
@@ -180,7 +181,6 @@ module.exports = {
                                         return match.substr(0, 1) + match.substr(1, match.length - 3) + match.substr(match.length - 1);
                                     })
                             };
-
                         } else {
                             lastObject.text += "\n" + javadocLine
                                 .replace(/^ /g, "")
@@ -191,62 +191,61 @@ module.exports = {
                     });
                     javadocCommentData.push(lastObject);
                     javadocFileDataLines.push(javadocCommentData);
-                } else if (entityType === ENTITY_TYPE._CLASSNODOCS) {
-                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", "class")}]);
-                } else if (entityType === ENTITY_TYPE._METHOD) {
-                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", "method")}]);
+                } else {
+                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", entityHeader.name)}]);
                 }
             });
             return javadocFileDataLines;
         }
 
-        function getEntity(e, t) {
-            if (t === ENTITY_TYPE._CLASS) return getClass(e);
-            if (t === ENTITY_TYPE._CLASSNODOCS) return getClassNoDocs(e);
-            if (t === ENTITY_TYPE._METHOD) return getMethod(e);
-            if (t === ENTITY_TYPE._PROPERTY) return getProp(e);
+        function getEntity(data, entityType) {
+            if (entityType === ENTITY_TYPE._CLASS) return getClass(data);
+            if (entityType === ENTITY_TYPE._CLASSNODOCS) return getClassNoDocs(data);
+            if (entityType === ENTITY_TYPE._METHOD) return getMethod(data);
+            if (entityType === ENTITY_TYPE._PROPERTY) return getProp(data);
             return undefined;
         }
 
-        function getProp(e) {
+        function getProp(data) {
 
             var ret = {
                 name: "Property",
-                toc: e[5],
-                text: e[5],
-                type: e[4],
-                static: e[3] === "static"
+                toc: data[5],
+                text: data[5],
+                type: data[4],
+                static: data[3] === "static"
             };
             return ret;
         }
 
-        function getMethod(e) {
+        function getMethod(data) {
             var ret = {
                 name: "Method",
-                toc: e[5] + e[6],
-                text: e[3] + ' ' +
-                    e[4] + ' ' +
-                    e[5] +
-                    e[6]
+                toc: data[5] + data[6],
+                text: data[3] + ' ' +
+                    data[4] + ' ' +
+                    data[5] +
+                    data[6]
             };
             return ret;
         }
 
-        function getClass(e) {
+        function getClass(data) {
             var ret = {
-                name: "Class",
-                toc: e[5],
-                text: e[5]
+                name: data[3],
+                toc: data[5],
+                text: data[5],
+                body: data[7]
             };
-            __LOG__('ret = ' + ret);
             return ret;
         }
 
-        function getClassNoDocs(e) {
+        function getClassNoDocs(data) {
             var ret = {
-                name: "Class",
-                toc: e[4],
-                text: e[4]
+                name: data[3],
+                toc: data[4],
+                text: data[4],
+                body: data[6].replace(/\s/g, "")
             };
             return ret;
         }
@@ -292,12 +291,15 @@ module.exports = {
                         if (commentData === null) break;
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
+                                __LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
+
                                 var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
                                 var type = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
                                 var toc = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
+                                var body = commentData[b].body === undefined ? "" : commentData[b].body;
                                 var code = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
-                                //__LOG__("commentData[b].text = " + commentData[b].text);
+
                                 if (code.length > 0 && code[0] !== undefined) {
                                     code = "" + code[0];
                                     var stripped = code.replace(/\n/g, "");
@@ -308,9 +310,15 @@ module.exports = {
                                 if (name.length) {
                                     name = name[0].toUpperCase() + name.substr(1);
                                 }
-                                if (name === 'Class') {
-                                    tocData += (`\n1. [${toc} class](#${toc.replace(/\s/g, "-")}-class)`);
-                                    text = `\n---\n### ${text} class (${file})`;
+                                if (name === 'Class' || name === 'Enum') {
+                                    tocData += (`\n1. [${toc} ${name}](#${toc.replace(/\s/g, "-")}-${name})`);
+                                    text = `\n---\n### ${text} ${name} (${file})`;
+                                    if (name === 'Enum' && body !== undefined) {
+                                        data += '\n#####Values:\n|Name|\n|:---|';
+                                        body.split(',').forEach(function(enumText) {
+                                            data += `\n|${enumText}|`
+                                        });
+                                    }
                                 } else if (name === 'Method') {
                                     tocData += (`\n   * ${escapeAngleBrackets(toc)}`);
                                     text = `#### ${escapeAngleBrackets(text)}`;
