@@ -291,7 +291,7 @@ module.exports = {
                         if (commentData === null) break;
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
-                                __LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
+                                //__LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
 
                                 var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
