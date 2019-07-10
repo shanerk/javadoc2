@@ -10,7 +10,7 @@ module.exports = {
         const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
 
         //const REGEX_ENUM = /(\w)*[ \t]+enum[ \t]+(\w)*[ \t]*{/g;
-        const REGEX_CLASS = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
+        const REGEX_CLASS = /\*\*[^\n]*\n((?:[^\n]*\n)+)[\s]*\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_CLASS_NODOC = /(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_METHOD = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
         const REGEX_METHOD_NODOC = /([ \t])*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
@@ -43,7 +43,8 @@ module.exports = {
                 include: ["**/*.cls"],
                 exclude: ["**/node_modules/**/*"],
                 output: undefined,
-                format: "markdown"
+                format: "markdown",
+                accessors: ["global"]
             }, optionsArg);
             hasOutput = options.output;
             // Negate all the excluded patterns:
@@ -154,14 +155,18 @@ module.exports = {
                         currentClassIsTest = false;
                     }
                 }
-                if (entityType === ENTITY_TYPE.METHOD) {
-                    if (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest) {
-                        return;
-                    }
-                }
+
+                // Skip test methods and methods within test classes
+                if (entityType === ENTITY_TYPE.METHOD && (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest))
+                    return;
 
                 var entityHeader = getEntity(data, entityType);
-                if (entityHeader !== undefined) javadocFileDataLines.push([entityHeader]);
+
+                // Skip invalid entities, or entities that have non-included accesors (see getEntity() method)
+                if (entityHeader === undefined)
+                    return;
+
+                javadocFileDataLines.push([entityHeader]);
 
                 if (data[0].match(REGEX_JAVADOC) !== null) {
                     var javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
@@ -206,17 +211,20 @@ module.exports = {
         }
 
         function getEntity(data, entityType) {
-            if (entityType === ENTITY_TYPE.CLASS) return getClass(data);
-            if (entityType === ENTITY_TYPE.CLASSNODOCS) return getClassNoDocs(data);
-            if (entityType === ENTITY_TYPE.METHOD) return getMethod(data);
-            if (entityType === ENTITY_TYPE.PROPERTY) return getProp(data);
-            return undefined;
+            let ret = undefined;
+            if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
+            if (entityType === ENTITY_TYPE.CLASSNODOCS) ret = getClassNoDocs(data);
+            if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
+            if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
+            if (!options.accessors.includes(ret.accessor)) return undefined;
+            return ret;
         }
 
         function getProp(data) {
 
             var ret = {
                 name: "Property",
+                accessor: data[1],
                 toc: data[5],
                 text: data[5],
                 type: data[4],
@@ -228,6 +236,7 @@ module.exports = {
         function getMethod(data) {
             var ret = {
                 name: "Method",
+                accessor: data[2],
                 toc: data[5] + data[6],
                 text: data[3] + ' ' +
                     data[4] + ' ' +
@@ -239,20 +248,23 @@ module.exports = {
 
         function getClass(data) {
             var ret = {
-                name: data[3], // Class, Enum, etc.
+                name: data[4], // Class, Enum, etc.
+                accessor: data[2],
                 toc: data[5],
                 text: data[5],
-                body: data[7]
+                body: data[7].replace(/\s/g, "") // for Enums
             };
+            __LOG__(JSON.stringify(ret));
             return ret;
         }
 
         function getClassNoDocs(data) {
             var ret = {
                 name: data[3], // Class, Enum, etc.
+                accessor: data[1],
                 toc: data[4],
                 text: data[4],
-                body: data[6].replace(/\s/g, "")
+                body: data[6].replace(/\s/g, "") // for Enums
             };
             return ret;
         }
@@ -299,58 +311,57 @@ module.exports = {
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
                                 //__LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
-                                var name = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
+                                var entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
-                                var type = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
-                                var toc = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
+                                var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
+                                var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
                                 var body = commentData[b].body === undefined ? "" : commentData[b].body;
-                                var code = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                                var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
 
-                                if (code.length > 0 && code[0] !== undefined) {
-                                    code = "" + code[0];
-                                    var stripped = code.replace(/\n/g, "");
-                                    __LOG__("code = " + stripped);
-                                    text = text.replace(stripped, "\n#####Example:\n```" + code.replace(/{@code|\n}\n/g, "") + "\n```\n");
+                                if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
+                                    codeBlock = "" + codeBlock[0];
+                                    var stripped = codeBlock.replace(/\n/g, "");
+                                    text = text.replace(stripped, "\n#####Example:\n```" + codeBlock.replace(/{@code|\n}\n/g, "") + "\n```\n");
                                 }
 
-                                if (name.length) {
-                                    name = name[0].toUpperCase() + name.substr(1);
+                                if (entityType.length) {
+                                    entityType = entityType[0].toUpperCase() + entityType.substr(1);
                                 }
-                                if (name === 'Class' || name === 'Enum') {
-                                    tocData += (`\n1. [${toc} ${name}](#${toc.replace(/\s/g, "-")}-${name})`);
-                                    text = `\n---\n### ${text} ${name} (${file.substring(file.lastIndexOf('/')+1)})`;
-                                    if (name === 'Enum' && body !== undefined) {
+                                if (entityType === 'Class' || entityType === 'Enum') {
+                                    tocData += (`\n1. [${entityName} ${entityType}](#${entityName.replace(/\s/g, "-")}-${entityType})`);
+                                    text = `\n---\n### ${text} ${entityType} (${file.substring(file.lastIndexOf('/')+1)})`;
+                                    if (entityType === 'Enum' && body !== undefined) {
                                         data += '\n#####Values:\n|Name|\n|:---|';
                                         body.split(',').forEach(function(enumText) {
                                             data += `\n|${enumText}|`
                                         });
                                     }
-                                } else if (name === 'Method') {
-                                    tocData += (`\n   * ${escapeAngleBrackets(toc)}`);
+                                } else if (entityType === 'Method') {
+                                    tocData += (`\n   * ${escapeAngleBrackets(entityName)}`);
                                     text = `#### ${escapeAngleBrackets(text)}`;
-                                } else if (name === "Param") {
+                                } else if (entityType === "Param") {
                                     if (firstParam) {
                                         data += '\n#####Parameters:\n|Type|Name|Description|\n|:---|:---|:---|\n';
                                         firstParam = false;
                                     }
                                     var pname = text.substr(0, text.indexOf(" "));
                                     var descrip = text.substr(text.indexOf(" "));
-                                    text = `|${name}|${pname}|${descrip}|`;
-                                } else if (name === "Return") {
+                                    text = `|${entityType}|${pname}|${descrip}|`;
+                                } else if (entityType === "Return") {
                                     if (firstParam) {
                                         data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
                                         firstParam = false;
                                     }
-                                    text = `|${name}|n/a|${text}|`;
-                                } else if (name === "Property") {
+                                    text = `|${entityType}|n/a|${text}|`;
+                                } else if (entityType === "Property") {
                                     if (firstProp) {
                                         data += '\n####Properties\n|Static?|Type|Property|Description|' +
                                             '\n|:---|:---|:---|:---|\n';
                                         firstProp = false;
                                     }
                                     var static = commentData[b].static ? "Yes" : " ";
-                                    text = `|${static}|${type}|${text}|`;
-                                } else if (name === "Author") {
+                                    text = `|${static}|${entitySubtype}|${text}|`;
+                                } else if (entityType === "Author") {
                                     text = "";
                                 }
                                 data += `${text}\n`;
@@ -390,10 +401,11 @@ module.exports = {
             const fs = require("fs");
             var docComments = {};
             __LOG__("Starting.");
-            __LOG__("Options:", options.include);
+            __LOG__("Files:", options.include);
             __LOG__("Excluded:", options.exclude);
             __LOG__("Output:", options.output);
             __LOG__("Format:", options.format);
+            __LOG__("Accessors:", options.accessors);
             const files = globule.find([].concat(options.include).concat(options.exclude));
             __LOG__("Files found: " + files.length);
             for (var a = 0; a < files.length; a++) {
