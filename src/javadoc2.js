@@ -10,7 +10,7 @@ module.exports = {
         const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
 
         //const REGEX_ENUM = /(\w)*[ \t]+enum[ \t]+(\w)*[ \t]*{/g;
-        const REGEX_CLASS = /\*\*[^\n]*\n((?:[^\n]*\n)+)[\s]*\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
+        const REGEX_CLASS = /\/\*\*[^\n]*\n((?:[^\n]*\n)+)[\s]*\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_CLASS_NODOC = /(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_METHOD = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
         const REGEX_METHOD_NODOC = /([ \t])*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
@@ -254,7 +254,6 @@ module.exports = {
                 text: data[5],
                 body: data[7].replace(/\s/g, "") // for Enums
             };
-            __LOG__(JSON.stringify(ret));
             return ret;
         }
 
