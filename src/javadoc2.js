@@ -14,7 +14,8 @@ module.exports = {
         const REGEX_CLASS_NODOC = /(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
         const REGEX_METHOD = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
         const REGEX_METHOD_NODOC = /([ \t])*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
-        const REGEX_PROPERTY = /(?:[ \t])+(\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*((=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
+        const REGEX_PROPERTY = /[^\n]\/\*\*[^\n]*\n(?:(?:[^\n]*\n)+)[\s]*\*\/\s*(\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*((=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
+        const REGEX_PROPERTY_NODOC = /(?:[ \t])+(\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*((=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
@@ -85,7 +86,13 @@ module.exports = {
             }
 
             // Handle Properties
-            propertyData = matchAll(text, REGEX_PROPERTY);
+            propertyData = merge(
+                matchAll(text, REGEX_PROPERTY),
+                matchAll(text, REGEX_PROPERTY_NODOC),
+                5,
+                5
+            ).sort(EntityComparator);
+
             if (propertyData.length > 0) {
                 logOutput += 'Property matches: ' + propertyData.length + ' ';
                 javadocFileData = javadocFileData.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
@@ -97,13 +104,15 @@ module.exports = {
                 matchAll(text, REGEX_METHOD_NODOC),
                 5,
                 5
-            ).sort(MethodComparator);
+            ).sort(EntityComparator);
 
             methodData = filter(methodData);
             if (methodData.length > 0) {
                 logOutput += 'Method matches: ' + methodData.length;
                 javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD));
             }
+
+            // Output to the logger
             if (logOutput.length > 0) {
                 __LOG__(logOutput)
             } else {
@@ -138,7 +147,7 @@ module.exports = {
             return data1;
         }
 
-        function MethodComparator(a, b) {
+        function EntityComparator(a, b) {
             if (a[5] < b[5]) return -1;
             if (a[5] > b[5]) return 1;
             return 0;
@@ -146,7 +155,14 @@ module.exports = {
 
         function parseData(fileData, entityType) {
             var javadocFileDataLines = [];
+
             fileData.forEach(function(data) {
+                var lastObject = {
+                    name: "default",
+                    text: ""
+                };
+                var javadocCommentData = [];
+
                 if (entityType === ENTITY_TYPE.CLASS || entityType === ENTITY_TYPE.CLASSNODOCS) {
                     if (data[0].indexOf('@IsTest') !== -1) {
                         currentClassIsTest = true;
@@ -157,26 +173,21 @@ module.exports = {
                 }
 
                 // Skip test methods and methods within test classes
-                if (entityType === ENTITY_TYPE.METHOD && (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest))
-                    return;
+                if (entityType === ENTITY_TYPE.METHOD &&
+                    (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest)
+                    ) return;
 
                 var entityHeader = getEntity(data, entityType);
 
                 // Skip invalid entities, or entities that have non-included accesors (see getEntity() method)
-                if (entityHeader === undefined)
-                    return;
+                if (entityHeader === undefined) return;
 
-                javadocFileDataLines.push([entityHeader]);
-
+                // Process Javadocs, if any
                 if (data[0].match(REGEX_JAVADOC) !== null) {
                     var javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
                     var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
-                    var javadocCommentData = [];
                     var attributeMatch = "default";
-                    var lastObject = {
-                        name: "default",
-                        text: ""
-                    };
+
                     javadocLines.forEach(function(javadocLine) {
                         var attrMatch = javadocLine.match(REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE);
                         var isNewMatch = (!!attrMatch);
@@ -202,9 +213,17 @@ module.exports = {
                         }
                     });
                     javadocCommentData.push(lastObject);
+                } else {
+                    javadocCommentData.push({text: STR_TODO.replace("_ENTITY_", entityHeader.name)});
+                }
+
+                if (entityType != ENTITY_TYPE.PROPERTY) {
+                    javadocFileDataLines.push([entityHeader]);
                     javadocFileDataLines.push(javadocCommentData);
                 } else {
-                    javadocFileDataLines.push([{text: STR_TODO.replace("_ENTITY_", entityHeader.name)}]);
+                    __LOG__('224 javadocCommentData = ' + JSON.stringify(javadocCommentData));
+                    entityHeader.descrip = javadocCommentData[0].text; // For property entities, add the javadoc right to the object
+                    javadocFileDataLines.push([entityHeader]);
                 }
             });
             return javadocFileDataLines;
@@ -221,13 +240,13 @@ module.exports = {
         }
 
         function getProp(data) {
-
-            var ret = {
+            let ret = {
                 name: "Property",
-                accessor: data[1],
+                accessor: data[2],
                 toc: data[5],
                 text: data[5],
                 type: data[4],
+                descrip: "",
                 static: data[3] === "static"
             };
             return ret;
@@ -309,17 +328,20 @@ module.exports = {
                         if (commentData === null) break;
                         for (var b = 0; b < commentData.length; b++) {
                             (function(commentData) {
-                                //__LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
+
                                 var entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
-                                var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/g, "");
-                                var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/g, "");
-                                var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/g, "");
+                                var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
+                                var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
+                                var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
                                 var body = commentData[b].body === undefined ? "" : commentData[b].body;
+                                var descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip;
                                 var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+
+                                //__LOG__("commentData[b] = " + JSON.stringify(commentData[b]));
 
                                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
                                     codeBlock = "" + codeBlock[0];
-                                    var stripped = codeBlock.replace(/\n/g, "");
+                                    var stripped = codeBlock.replace(/\n/gm, "");
                                     text = text.replace(stripped, "\n#####Example:\n```" + codeBlock.replace(/{@code|\n}\n/g, "") + "\n```\n");
                                 }
 
@@ -359,7 +381,7 @@ module.exports = {
                                         firstProp = false;
                                     }
                                     var static = commentData[b].static ? "Yes" : " ";
-                                    text = `|${static}|${entitySubtype}|${text}|`;
+                                    text = `|${static}|${entitySubtype}|${text}|${descrip}|`;
                                 } else if (entityType === "Author") {
                                     text = "";
                                 }
