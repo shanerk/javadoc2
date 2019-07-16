@@ -282,6 +282,7 @@ module.exports = {
         }
 
         function getMethod(data) {
+            data[2] = data[2] === "override" ? "" : data[2];
             var ret = {
                 name: "Method",
                 accessor: data[1],
@@ -399,7 +400,7 @@ module.exports = {
                                         data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
                                         firstParam = false;
                                     }
-                                    text = `|${entityType}|n/a|${text}|`;
+                                    text = `|${entityType}| |${text}|`;
                                 } else if (entityType === "Property") {
                                     if (firstProp) {
                                         data += '\n#### Properties\n\n|Static?|Type|Property|Description|' +
