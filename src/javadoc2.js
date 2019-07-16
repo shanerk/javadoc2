@@ -7,22 +7,35 @@ module.exports = {
         var currentClassIsTest = undefined;
         var isIgnorePrivate = true;
 
-        //const REGEX_JAVADOC = \/\*\*(?:[^\*]|\*(?!\/))*.*?\*\/
+        const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
+        const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
+        const REGEX_WS = /\s*/;
 
-        const REGEX_CLASS =
-            /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\/\s*(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
-        const REGEX_CLASS_NODOC =
-            /(?:\@[^\n]*[\s]+)*^([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/gm;
-        const REGEX_METHOD =
-            /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\/\s*(?:\@[\w]+\s*)*\s*([\w]+)\s*([\w]*)\s+([\w\<\>\[\]\, \t]*)\s+([\w]+)\s*(\([^\)]*\))\s*(?:[{])/gm;
-        const REGEX_METHOD_NODOC =
-            /\s*(?:\@[\w]+\s*)*[ \t]*([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/gm;
-        const REGEX_PROPERTY =
-            /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\/\s*(?:\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:(?:=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
-        const REGEX_PROPERTY_NODOC =
-            /\s*(?:\@[\w]+[ \t]*)*\s*(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:(?:=[\w\s\[\]<>,{}'=()]*)|;)+/gm;
+        const REGEX_CLASS_NODOC = new RegExp(
+            REGEX_ATTRIBUTES.source +
+            /([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/.source,
+            'gm'
+            );
+        const REGEX_CLASS = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CLASS_NODOC.source, 'gm');
+        __DBG__('REGEX_CLASS = ' + REGEX_CLASS);
 
-        const REGEX_JAVADOC = /\/\*\*[^\n]*\n([\t ]*\*[\t ]*[^\n]*\n)+[\t ]*\*\//g;
+        const REGEX_METHOD_NODOC = new RegExp(
+            REGEX_ATTRIBUTES.source +
+            /([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
+            'gm'
+            );
+        const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
+        __DBG__('REGEX_METHOD = ' + REGEX_METHOD);
+
+
+        const REGEX_PROPERTY_NODOC = new RegExp(
+            REGEX_ATTRIBUTES.source +
+            /(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
+            'gm'
+            );
+        const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
+        __DBG__('REGEX_PROPERTY = ' + REGEX_PROPERTY);
+
         const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
         const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
         const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
@@ -97,8 +110,8 @@ module.exports = {
             propertyData = merge(
                 matchAll(text, REGEX_PROPERTY),
                 matchAll(text, REGEX_PROPERTY_NODOC),
-                5,
-                5
+                4,
+                4
             ).sort(EntityComparator);
             __DBG__("Properties = " + propertyData.length);
 
@@ -111,8 +124,8 @@ module.exports = {
             methodData = merge(
                 matchAll(text, REGEX_METHOD),
                 matchAll(text, REGEX_METHOD_NODOC),
-                5,
-                5
+                4,
+                4
             ).sort(EntityComparator);
             __DBG__("Methods = " + methodData.length);
 
@@ -226,14 +239,19 @@ module.exports = {
                     });
                     javadocCommentData.push(lastObject);
                 } else {
-                    javadocCommentData.push({text: STR_TODO.replace("_ENTITY_", entityHeader.name)});
+                    // Add TODO for all types except: Enum
+                    if (entityHeader.name !== "enum") {
+                        javadocCommentData.push({text: STR_TODO.replace("_ENTITY_", entityHeader.name)});
+                    }
                 }
 
+                // Javadocs are pushed onto the stack after the header for all entity types except: Property
                 if (entityType != ENTITY_TYPE.PROPERTY) {
                     javadocFileDataLines.push([entityHeader]);
                     javadocFileDataLines.push(javadocCommentData);
                 } else {
-                    entityHeader.descrip = javadocCommentData[0].text; // For property entities, add the javadoc right to the object
+                    // For property entities, add the javadoc right to the object
+                    entityHeader.descrip = javadocCommentData[0].text;
                     javadocFileDataLines.push([entityHeader]);
                 }
             });
@@ -349,19 +367,20 @@ module.exports = {
                                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
                                     codeBlock = "" + codeBlock[0];
                                     var stripped = codeBlock.replace(/\n/gm, " ");
-                                    text = text.replace(stripped, "\n#####Example:\n```" + codeBlock.replace(/{@code|\n}\n/g, "") + "\n```\n");
+                                    text = text.replace(stripped, "\n##### Example:\n```" + codeBlock.replace(/{@code|\n}\n/g, "") + "\n```\n");
                                 }
 
                                 if (entityType.length) {
                                     entityType = entityType[0].toUpperCase() + entityType.substr(1);
                                 }
                                 if (entityType === 'Class' || entityType === 'Enum') {
+                                    entityType = entityType.toLowerCase(entityType);
                                     tocData += (`\n1. [${entityName} ${entityType}](#${entityName.replace(/\s/g, "-")}-${entityType})`);
-                                    text = `\n---\n### ${text} ${entityType} (${file.substring(file.lastIndexOf('/')+1)})`;
-                                    if (entityType === 'Enum' && body !== undefined) {
-                                        data += '\n#####Values:\n|Name|\n|:---|';
+                                    text = `\n---\n### ${text} ${entityType}`;
+                                    if (entityType === 'enum' && body !== undefined) {
+                                        text += '\n\n|Values|\n|:---|';
                                         body.split(',').forEach(function(enumText) {
-                                            data += `\n|${enumText}|`
+                                            text += `\n|${enumText}|`
                                         });
                                     }
                                 } else if (entityType === 'Method') {
@@ -369,7 +388,7 @@ module.exports = {
                                     text = `#### ${escapeAngleBrackets(text)}`;
                                 } else if (entityType === "Param") {
                                     if (firstParam) {
-                                        data += '\n#####Parameters:\n|Type|Name|Description|\n|:---|:---|:---|\n';
+                                        data += '\n##### Parameters:\n\n|Type|Name|Description|\n|:---|:---|:---|\n';
                                         firstParam = false;
                                     }
                                     var pname = text.substr(0, text.indexOf(" "));
@@ -383,12 +402,12 @@ module.exports = {
                                     text = `|${entityType}|n/a|${text}|`;
                                 } else if (entityType === "Property") {
                                     if (firstProp) {
-                                        data += '\n####Properties\n|Static?|Type|Property|Description|' +
+                                        data += '\n#### Properties\n\n|Static?|Type|Property|Description|' +
                                             '\n|:---|:---|:---|:---|\n';
                                         firstProp = false;
                                     }
                                     var static = commentData[b].static ? "Yes" : " ";
-                                    __DBG__('descrip = ' + descrip);
+                                    descrip = descrip.replace(/\/\*\*/g, '');
                                     text = `|${static}|${entitySubtype}|${text}|${descrip}|`;
                                 } else if (entityType === "Author") {
                                     text = "";
