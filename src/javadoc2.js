@@ -10,6 +10,10 @@ module.exports = {
     const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
     const REGEX_WS = /\s*/;
+    const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
+    const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
+    const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
+    const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)/gm;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -35,11 +39,6 @@ module.exports = {
     );
     const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
     __DBG__('REGEX_PROPERTY = ' + REGEX_PROPERTY);
-
-    const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
-    const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
-    const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
-    const REGEX_JAVADOC_CODE_BLOCK = /{@code([\s\S]*)(?:\n}|\*})/g;
 
     const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
 
@@ -91,7 +90,9 @@ module.exports = {
       var logOutput = "";
 
       // Handle Classes
+      // TODO: Refactor this to use merge() instead, and eliminate CLASSNODOCS entity type
       classData = matchAll(text, REGEX_CLASS);
+      classData = filter(classData);
 
       if (classData.length > 0) {
         logOutput += 'Class matches: ' + classData.length + ' ';
@@ -99,6 +100,7 @@ module.exports = {
       } else {
         // No Javadoc?  No Problem!
         classData = matchAll(text, REGEX_CLASS_NODOC);
+        classData = filter(classData);
         if (classData.length > 0) {
           logOutput += 'Class matches: ' + classData.length + ' ';
           javadocFileData = parseData(classData, ENTITY_TYPE.CLASSNODOCS);
@@ -113,6 +115,7 @@ module.exports = {
         4,
         4
       ).sort(EntityComparator);
+      propertyData = filter(propertyData);
       __DBG__("Properties = " + propertyData.length);
 
       if (propertyData.length > 0) {
@@ -127,10 +130,8 @@ module.exports = {
         4,
         4
       ).sort(EntityComparator);
-      __DBG__("Methods = " + methodData.length);
-
       methodData = filter(methodData);
-      __DBG__("Filtered Methods = " + methodData.length);
+      __DBG__("Methods = " + methodData.length);
 
       if (methodData.length > 0) {
         logOutput += 'Method matches: ' + methodData.length;
@@ -148,14 +149,11 @@ module.exports = {
     };
 
     function filter(data) {
-      var ret = [];
+      let ret = [];
       data.forEach(function (item) {
-        var include = true;
-        if (isIgnorePrivate && item[1] === "private") {
-          include = false;
-        }
-        if (include) ret.push(item);
+        if (options.accessors.includes(item[1])) ret.push(item);
       });
+      if (ret.length < data.length) __DBG__("Filtered out " + (data.length - ret.length) + " entities based on accessors.");
       return ret;
     }
 
@@ -264,7 +262,10 @@ module.exports = {
       if (entityType === ENTITY_TYPE.CLASSNODOCS) ret = getClassNoDocs(data);
       if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
       if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
-      if (!options.accessors.includes(ret.accessor)) return undefined;
+      // if (!options.accessors.includes(ret.accessor)) {
+      //   __DBG__("Removing " + ret.text + " because accessor = " + ret.accessor);
+      //   return undefined;
+      // }
       return ret;
     }
 
@@ -345,15 +346,16 @@ module.exports = {
       const path = require("path");
       const mkdirp = require('mkdirp');
       var data = undefined;
+      __DBG__('formatData format = ' + options.format);
       if (options.format === "markdown") {
         var tocData = "";
         data = "";
         for (var file in docComments) {
           var docCommentsFile = docComments[file];
-          var firstProp = true;
           for (var a = 0; a < docCommentsFile.length; a++) {
             var commentData = docCommentsFile[a];
             var firstParam = true;
+            var firstProp = true;
             if (commentData === null) break;
             for (var b = 0; b < commentData.length; b++) {
               (function (commentData) {
@@ -366,8 +368,11 @@ module.exports = {
                 var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
 
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
-                  codeBlock = undentBlock(codeBlock[0][1]); // capture group 1 has the good stuff
-                  text = "\n##### Example:\n```" + getLang(file) + codeBlock + "```\n";
+                  text = "";
+                  codeBlock.forEach(function(block) {
+                    // capture group [1] has the raw code sample
+                    text += "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n";
+                  });
                 }
 
                 if (entityType.length) {
