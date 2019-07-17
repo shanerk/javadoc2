@@ -366,7 +366,7 @@ module.exports = {
                 var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
 
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
-                  codeBlock = fixIndent(codeBlock[0][1]); // capture group 1 has the good stuff
+                  codeBlock = undentBlock(codeBlock[0][1]); // capture group 1 has the good stuff
                   text = "\n##### Example:\n```" + getLang(file) + codeBlock + "```\n";
                 }
 
@@ -448,12 +448,12 @@ module.exports = {
       if (file.substr(file.length - 4, file.length) === ".cls") return "apex";
     }
 
-    function fixIndent(block) {
+    function undentBlock(block) {
       let REGEX_INDEX = /^[ \t]*\**[ \t]+/g;
       let indent = null;
       block.split("\n").forEach(function (line) {
         let match = line.match(REGEX_INDEX);
-        let cur = match !== null ? match[0].replace(/\*/g, "").length : null;
+        let cur = match !== null ? match[0].length : null;
         if (cur < indent || indent === null) indent = cur;
       });
       let ret = "";
@@ -469,7 +469,7 @@ module.exports = {
       let count = 0;
       for (var i = 0; i < str.length; i++) {
         let c = str.charAt(i);
-        if ((c === " " || c === "*") && count <= remove) {
+        if ((c === " ") && count < remove) {
           count++;
         } else {
           break;
