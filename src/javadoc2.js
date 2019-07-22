@@ -34,7 +34,7 @@ module.exports = {
 
     const REGEX_PROPERTY_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
+      /(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
       'gm'
     );
     const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
@@ -345,17 +345,18 @@ module.exports = {
       const fs = require("fs");
       const path = require("path");
       const mkdirp = require('mkdirp');
-      var data = undefined;
+      let data = undefined;
       __DBG__('formatData format = ' + options.format);
       if (options.format === "markdown") {
-        var tocData = "";
+        let tocData = "";
         data = "";
+
         for (var file in docComments) {
-          var docCommentsFile = docComments[file];
+          let docCommentsFile = docComments[file];
+          let firstProp = true;
           for (var a = 0; a < docCommentsFile.length; a++) {
-            var commentData = docCommentsFile[a];
-            var firstParam = true;
-            var firstProp = true;
+            let commentData = docCommentsFile[a];
+            let firstParam = true;
             if (commentData === null) break;
             for (var b = 0; b < commentData.length; b++) {
               (function (commentData) {
