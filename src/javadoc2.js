@@ -76,8 +76,10 @@ module.exports = {
     /** Parse File ****************************************************************************************************/
 
     function parseFile(text) {
-      let codeFileData = [];
+      let fileData = [];
       let classData = [];
+      let classes = [];
+      let i = 0;
 
       classData = merge(
         matchAll(text, REGEX_CLASS),
@@ -90,19 +92,27 @@ module.exports = {
       __LOG__("Classes = " + classData.length);
 
       classData.forEach(function(data) {
-        let parsedClass = parseData([data], ENTITY_TYPE.CLASS);
-        let entity = getClass(data);
-        __LOG__("Class = " + entity.toc);
-        if (codeFileData.length === 0) {
-          codeFileData = parsedClass;
-        } else {
-          codeFileData = codeFileData.concat(parsedClass);
-        }
-        let subEntities = parseClass(entity.body);
-        if (subEntities !== undefined) codeFileData = codeFileData.concat(subEntities);
+        let c = getClass(data);
+        classes.push(c);
       });
 
-      return codeFileData;
+      classes = setLevels(classes).sort(ClassLevelComparator);
+      classes = setClassPaths(classes);
+
+      classData.forEach(function(data) {
+        let parsedClass = parseData([data], ENTITY_TYPE.CLASS, classes[i]);
+        __LOG__("Class = " + classes[i].path);
+        if (fileData.length === 0) {
+          fileData = parsedClass;
+        } else {
+          fileData = fileData.concat(parsedClass);
+        }
+        let members = parseClass(classes[i].body);
+        if (members !== undefined) fileData = fileData.concat(members);
+        i++;
+      });
+
+      return fileData;
     }
 
     /** Parse Class ***************************************************************************************************/
@@ -142,7 +152,7 @@ module.exports = {
 
     /** Parse Data ****************************************************************************************************/
 
-    function parseData(javadocData, entityType) {
+    function parseData(javadocData, entityType, header) {
       let javadocFileDataLines = [];
 
       javadocData.forEach(function (data) {
@@ -166,7 +176,7 @@ module.exports = {
           (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest)
         ) return;
 
-        var entityHeader = getEntity(data, entityType);
+        var entityHeader = header === undefined ? getEntity(data, entityType) : header;
 
         // Skip invalid entities, or entities that have non-included accesors (see getEntity() method)
         if (entityHeader === undefined) return;
@@ -248,6 +258,7 @@ module.exports = {
                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
                 var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
                 var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
+                var classPath = commentData[b].path === undefined ? "" : commentData[b].path.replace(/\n/gm, " ");
                 var body = commentData[b].body === undefined ? "" : commentData[b].body;
                 var descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
                 var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
@@ -265,8 +276,8 @@ module.exports = {
                 }
                 if (entityType === 'Class' || entityType === 'Enum') {
                   entityType = entityType.toLowerCase(entityType);
-                  tocData += (`\n1. [${entityName} ${entityType}](#${entityName.replace(/\s/g, "-")}-${entityType})`);
-                  text = `\n---\n### ${text} ${entityType}`;
+                  tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType})`);
+                  text = `\n---\n### ${classPath} ${entityType}`;
                   if (entityType === 'enum' && body !== undefined) {
                     text += '\n\n|Values|\n|:---|';
                     body.split(',').forEach(function (enumText) {
@@ -400,6 +411,12 @@ module.exports = {
       return 0;
     }
 
+    function ClassLevelComparator(a, b) {
+      if (a.level < b.level) return -1;
+      if (a.level > b.level) return 1;
+      return 0;
+    }
+
     function getEntity(data, entityType) {
       let ret = undefined;
       if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
@@ -448,10 +465,55 @@ module.exports = {
         text: data[4],
         body: data.input.substring(data.index, endIndex),
         line: getLineNumber(data),
+        signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace("  ", " ") + " ",
         start: data.index,
-        end: endIndex
+        end: endIndex,
+        path: "",
+        level: undefined
       };
       return ret;
+    }
+
+    function setLevels(classes) {
+      classes.forEach(function(cur) {
+        cur.level = recLevel(cur, classes.slice(0), 0);
+      });
+      return classes;
+    }
+
+    function recLevel(target, classes, level) {
+      classes.forEach(function(cur) {
+        if (target !== cur) {
+          let child = cur.body.includes(target.signature);
+          if (child) {
+            level = recLevel(cur, classes, level + 1);
+          } else {
+            classes = classes.splice(classes.indexOf(target), 1);
+          }
+        }
+      });
+      return level;
+    }
+
+    function setClassPaths(classes) {
+      classes.forEach(function(cur) {
+        cur.path = recPath(cur, cur.path, classes.slice(0), 0) + cur.toc;
+      });
+      return classes;
+    }
+
+    function recPath(target, path, classes, level) {
+      classes.forEach(function(cur) {
+        if (target !== cur) {
+          let child = cur.body.includes(target.signature);
+          if (child) {
+            path += recPath(cur, cur.toc, classes, level + 1) + ".";
+          } else {
+            classes = classes.splice(classes.indexOf(target), 1);
+          }
+        }
+      });
+      return path;
     }
 
     function getLineNumber(data) {
