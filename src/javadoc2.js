@@ -27,7 +27,6 @@ module.exports = {
     const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
     __DBG__('REGEX_METHOD = ' + REGEX_METHOD);
 
-
     const REGEX_PROPERTY_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
       /(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
@@ -44,13 +43,16 @@ module.exports = {
       PROPERTY: 3
     }
 
-    // Main
+    /** Main **********************************************************************************************************/
+
     return (function () {
       normalizeOptions();
       var raw = iterateFiles();
-      var data = formatData(raw);
+      var data = formatOutput(raw);
       return data;
     })();
+
+    /** Normalize Options *********************************************************************************************/
 
     function normalizeOptions() {
       // Normalize arguments:
@@ -71,16 +73,9 @@ module.exports = {
       });
     };
 
-    function matchAll(str, regexp) {
-      let ret = [];
-      let result;
-      while (result = regexp.exec(str)) {
-        ret.push(result);
-      }
-      return ret;
-    }
+    /** Parse File ****************************************************************************************************/
 
-    function parseCodeFile(text) {
+    function parseFile(text) {
       let codeFileData = [];
       let classData = [];
 
@@ -109,6 +104,8 @@ module.exports = {
 
       return codeFileData;
     }
+
+    /** Parse Class ***************************************************************************************************/
 
     function parseClass(text) {
       let classBodyData = [];
@@ -143,33 +140,7 @@ module.exports = {
       return classBodyData;
     };
 
-    function filter(data) {
-      let ret = [];
-      data.forEach(function (item) {
-        if (options.accessors.includes(item[1])) ret.push(item);
-      });
-      if (ret.length < data.length) __DBG__("Filtered out " + (data.length - ret.length) + " entities based on accessors.");
-      return ret;
-    }
-
-    function merge(data1, data2, key1, key2) {
-      var keys = [];
-      data1.forEach(function (item) {
-        keys.push(item[key1]);
-      });
-      data2.forEach(function (item) {
-        if (!keys.includes(item[key2])) {
-          data1.push(item);
-        }
-      });
-      return data1;
-    }
-
-    function EntityComparator(a, b) {
-      if (a[4] < b[4]) return -1;
-      if (a[4] > b[4]) return 1;
-      return 0;
-    }
+    /** Parse Data ****************************************************************************************************/
 
     function parseData(javadocData, entityType) {
       let javadocFileDataLines = [];
@@ -251,107 +222,9 @@ module.exports = {
       return javadocFileDataLines;
     }
 
-    function getEntity(data, entityType) {
-      let ret = undefined;
-      if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
-      if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
-      if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
-      return ret;
-    }
+    /** Format Output *************************************************************************************************/
 
-    function getProp(data) {
-      let ret = {
-        name: "Property",
-        accessor: data[1],
-        toc: data[4],
-        text: data[4],
-        type: data[3],
-        descrip: "",
-        static: data[2] === "static",
-        line: getLineNumber(data),
-        start: data.index
-      };
-      return ret;
-    }
-
-    function getMethod(data) {
-      data[2] = data[2] === "override" ? "" : data[2];
-      var ret = {
-        name: "Method",
-        accessor: data[1],
-        toc: data[4] + data[5],
-        text: data[2] + ' ' +
-          data[3] + ' ' +
-          data[4] +
-          data[5],
-        line: getLineNumber(data),
-        start: data.index
-      };
-      return ret;
-    }
-
-    function getClass(data) {
-      let endIndex = getEndIndex(data);
-      var ret = {
-        name: data[3], // Class or Enum
-        accessor: data[1],
-        toc: data[4],
-        text: data[4],
-        body: data.input.substring(data.index, endIndex),
-        line: getLineNumber(data),
-        start: data.index,
-        end: endIndex
-      };
-      return ret;
-    }
-
-    function getLineNumber(data) {
-      if (data.index === 0) return 1;
-      let codeBlock = data.input.substr(0, data.index);
-      let lineNum = (codeBlock.match(/\n/g || []).length) + 1;
-      return lineNum;
-    }
-
-    function getEndIndex(data) {
-      let codeBlock = data.input.substring(data.index, data.input.length);
-      let ob = 0;
-      let cb = 0;
-      let endIndex = undefined;
-      for(var i = 0; i < codeBlock.length; i++) {
-        if (codeBlock.charAt(i) === "{") ob++;
-        if (codeBlock.charAt(i) === "}") cb++;
-        if (ob !== 0 && cb !== 0 && ob === cb) {
-          endIndex = i + data.index + 1;
-          break;
-        };
-      }
-      return endIndex;
-    }
-
-    function escapeAngleBrackets(str) {
-      return str.replace(/([\<\>])/g, function (match) {
-        return `\\${match}`
-      });
-    }
-
-    function __DBG__(msg) {
-      ///*
-      var otherArgs = Array.prototype.slice.call(arguments);
-      otherArgs.shift();
-      console.log.apply(console, ["[DEBUGGING] " + msg].concat(otherArgs));
-      //*/
-    };
-
-    function __LOG__(msg) {
-      if (options.output === undefined) {
-        return;
-      }
-      var otherArgs = Array.prototype.slice.call(arguments);
-      otherArgs.shift();
-      console.log.apply(console, ["[javadoc2] " + msg].concat(otherArgs));
-    };
-
-    function formatData(docComments) {
+    function formatOutput(docComments) {
       const fs = require("fs");
       const path = require("path");
       const mkdirp = require('mkdirp');
@@ -375,7 +248,7 @@ module.exports = {
                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
                 var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
                 var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
-                var body = commentData[b].body === undefined ? "" : commentData[b].body; // Only used for ENUMs, ergo no whitespace in this
+                var body = commentData[b].body === undefined ? "" : commentData[b].body;
                 var descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
                 var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
 
@@ -461,6 +334,169 @@ module.exports = {
       return data;
     };
 
+    /** Iterate Files *************************************************************************************************/
+
+    function iterateFiles() {
+      const globule = require("globule");
+      const fs = require("fs");
+      var docComments = {};
+      __LOG__("Starting.");
+      __LOG__("Files:", options.include);
+      __LOG__("Excluded:", options.exclude);
+      __LOG__("Output:", options.output);
+      __LOG__("Format:", options.format);
+      __LOG__("Accessors:", options.accessors);
+      const files = globule.find([].concat(options.include).concat(options.exclude));
+      __LOG__("Files found: " + files.length);
+      for (var a = 0; a < files.length; a++) {
+        var file = files[a];
+        __LOG__("File: " + file);
+        var contents = fs.readFileSync(file).toString();
+        var javadocMatches = parseFile(contents);
+        if (javadocMatches.length !== 0) {
+          docComments[file] = javadocMatches;
+        }
+      }
+      return docComments;
+    };
+
+    /** Utility Methods ***********************************************************************************************/
+
+    function matchAll(str, regexp) {
+      let ret = [];
+      let result;
+      while (result = regexp.exec(str)) {
+        ret.push(result);
+      }
+      return ret;
+    }
+
+    function filter(data) {
+      let ret = [];
+      data.forEach(function (item) {
+        if (options.accessors.includes(item[1])) ret.push(item);
+      });
+      if (ret.length < data.length)
+        __DBG__("Filtered out " + (data.length - ret.length) + " entities based on accessors.");
+      return ret;
+    }
+
+    function merge(data1, data2, key1, key2) {
+      var keys = [];
+      data1.forEach(function (item) {
+        keys.push(item[key1]);
+      });
+      data2.forEach(function (item) {
+        if (!keys.includes(item[key2])) {
+          data1.push(item);
+        }
+      });
+      return data1;
+    }
+
+    function EntityComparator(a, b) {
+      if (a[4] < b[4]) return -1;
+      if (a[4] > b[4]) return 1;
+      return 0;
+    }
+
+    function getEntity(data, entityType) {
+      let ret = undefined;
+      if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
+      if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
+      if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
+      return ret;
+    }
+
+    function getProp(data) {
+      let ret = {
+        name: "Property",
+        accessor: data[1],
+        toc: data[4],
+        text: data[4],
+        type: data[3],
+        descrip: "",
+        static: data[2] === "static",
+        line: getLineNumber(data),
+        start: data.index
+      };
+      return ret;
+    }
+
+    function getMethod(data) {
+      data[2] = data[2] === "override" ? "" : data[2];
+      var ret = {
+        name: "Method",
+        accessor: data[1],
+        toc: data[4] + data[5],
+        text: data[2] + ' ' +
+          data[3] + ' ' +
+          data[4] +
+          data[5],
+        line: getLineNumber(data),
+        start: data.index
+      };
+      return ret;
+    }
+
+    function getClass(data) {
+      let endIndex = getEndIndex(data);
+      var ret = {
+        name: data[3], // Class or Enum
+        accessor: data[1],
+        toc: data[4],
+        text: data[4],
+        body: data.input.substring(data.index, endIndex),
+        line: getLineNumber(data),
+        start: data.index,
+        end: endIndex
+      };
+      return ret;
+    }
+
+    function getLineNumber(data) {
+      if (data.index === 0) return 1;
+      let codeBlock = data.input.substr(0, data.index);
+      let lineNum = (codeBlock.match(/\n/g || []).length) + 1;
+      return lineNum;
+    }
+
+    function getEndIndex(data) {
+      const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
+
+      let codeBlock = data.input.substring(data.index, data.input.length);
+
+      // Replace string literals with spaces to prevent non-code matches
+      codeBlock = codeBlock.replace(REGEX_STRING, function(match, p1) {
+        return p1 + "".padStart(match.length - 2) + p1;
+      });
+
+      // Replace comment bodies with spaces to prevent non-code matches
+      codeBlock = codeBlock.replace(REGEX_JAVADOC, function(match, p1) {
+        return "/**" + "".padStart(match.length - 5) + "*/";
+      });
+
+      let ob = 0;
+      let cb = 0;
+      let endIndex = undefined;
+
+      for(var i = 0; i < codeBlock.length; i++) {
+        if (codeBlock.charAt(i) === "{") ob++;
+        if (codeBlock.charAt(i) === "}") cb++;
+        if (ob !== 0 && cb !== 0 && ob === cb) {
+          endIndex = i + data.index + 1;
+          break;
+        };
+      }
+      return endIndex;
+    }
+
+    function escapeAngleBrackets(str) {
+      return str.replace(/([\<\>])/g, function (match) {
+        return `\\${match}`
+      });
+    }
+
     function getLang(file) {
       if (file.substr(file.length - 4, file.length) === ".cls") return "apex";
     }
@@ -497,28 +533,21 @@ module.exports = {
       return ret + "\n";
     }
 
-    function iterateFiles() {
-      const globule = require("globule");
-      const fs = require("fs");
-      var docComments = {};
-      __LOG__("Starting.");
-      __LOG__("Files:", options.include);
-      __LOG__("Excluded:", options.exclude);
-      __LOG__("Output:", options.output);
-      __LOG__("Format:", options.format);
-      __LOG__("Accessors:", options.accessors);
-      const files = globule.find([].concat(options.include).concat(options.exclude));
-      __LOG__("Files found: " + files.length);
-      for (var a = 0; a < files.length; a++) {
-        var file = files[a];
-        __LOG__("File: " + file);
-        var contents = fs.readFileSync(file).toString();
-        var javadocMatches = parseCodeFile(contents);
-        if (javadocMatches.length !== 0) {
-          docComments[file] = javadocMatches;
-        }
+    function __DBG__(msg) {
+      ///*
+      var otherArgs = Array.prototype.slice.call(arguments);
+      otherArgs.shift();
+      console.log.apply(console, ["[DEBUGGING] " + msg].concat(otherArgs));
+      //*/
+    }
+
+    function __LOG__(msg) {
+      if (options.output === undefined) {
+        return;
       }
-      return docComments;
-    };
+      var otherArgs = Array.prototype.slice.call(arguments);
+      otherArgs.shift();
+      console.log.apply(console, ["[javadoc2] " + msg].concat(otherArgs));
+    }
   }
-};
+}
