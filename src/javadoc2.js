@@ -1,11 +1,7 @@
 module.exports = {
   generate: function generate(optionsArg) {
-    var options = undefined;
-    var methodData = undefined;
-    var propertyData = undefined;
-    var classData = undefined;
-    var currentClassIsTest = undefined;
-    var isIgnorePrivate = true;
+    let options = undefined;
+    let currentClassIsTest = undefined;
 
     const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
@@ -17,7 +13,7 @@ module.exports = {
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{([^}]*)}/.source,
+      /([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/.source,
       'gm'
     );
     const REGEX_CLASS = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CLASS_NODOC.source, 'gm');
@@ -45,8 +41,7 @@ module.exports = {
     const ENTITY_TYPE = {
       CLASS: 1,
       METHOD: 2,
-      CLASSNODOCS: 3,
-      PROPERTY: 4
+      PROPERTY: 3
     }
 
     // Main
@@ -85,67 +80,67 @@ module.exports = {
       return ret;
     }
 
-    function extractJavadocData(text) {
-      var javadocFileData = [];
-      var logOutput = "";
+    function parseCodeFile(text) {
+      let codeFileData = [];
+      let classData = [];
 
-      // Handle Classes
-      // TODO: Refactor this to use merge() instead, and eliminate CLASSNODOCS entity type
-      classData = matchAll(text, REGEX_CLASS);
+      classData = merge(
+        matchAll(text, REGEX_CLASS),
+        matchAll(text, REGEX_CLASS_NODOC),
+        4,
+        4
+      ).sort(EntityComparator);
       classData = filter(classData);
 
-      if (classData.length > 0) {
-        logOutput += 'Class matches: ' + classData.length + ' ';
-        javadocFileData = parseData(classData, ENTITY_TYPE.CLASS);
-      } else {
-        // No Javadoc?  No Problem!
-        classData = matchAll(text, REGEX_CLASS_NODOC);
-        classData = filter(classData);
-        if (classData.length > 0) {
-          logOutput += 'Class matches: ' + classData.length + ' ';
-          javadocFileData = parseData(classData, ENTITY_TYPE.CLASSNODOCS);
-        }
-      }
-      __DBG__("Classes = " + classData.length);
+      __LOG__("Classes = " + classData.length);
 
+      classData.forEach(function(data) {
+        let parsedClass = parseData([data], ENTITY_TYPE.CLASS);
+        let entity = getClass(data);
+        __LOG__("Class = " + entity.toc);
+        if (codeFileData.length === 0) {
+          codeFileData = parsedClass;
+        } else {
+          codeFileData = codeFileData.concat(parsedClass);
+        }
+        let subEntities = parseClass(entity.body);
+        if (subEntities !== undefined) codeFileData = codeFileData.concat(subEntities);
+      });
+
+      return codeFileData;
+    }
+
+    function parseClass(text) {
+      let classBodyData = [];
       // Handle Properties
-      propertyData = merge(
+      let propertyData = merge(
         matchAll(text, REGEX_PROPERTY),
         matchAll(text, REGEX_PROPERTY_NODOC),
         4,
         4
       ).sort(EntityComparator);
       propertyData = filter(propertyData);
-      __DBG__("Properties = " + propertyData.length);
+      __LOG__("Properties = " + propertyData.length);
 
       if (propertyData.length > 0) {
-        logOutput += 'Property matches: ' + propertyData.length + ' ';
-        javadocFileData = javadocFileData.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
+        classBodyData = classBodyData.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
       }
 
       // Handle Methods
-      methodData = merge(
+      let methodData = merge(
         matchAll(text, REGEX_METHOD),
         matchAll(text, REGEX_METHOD_NODOC),
         4,
         4
       ).sort(EntityComparator);
       methodData = filter(methodData);
-      __DBG__("Methods = " + methodData.length);
+      __LOG__("Methods = " + methodData.length);
 
       if (methodData.length > 0) {
-        logOutput += 'Method matches: ' + methodData.length;
-        javadocFileData = javadocFileData.concat(parseData(methodData, ENTITY_TYPE.METHOD));
+        classBodyData = classBodyData.concat(parseData(methodData, ENTITY_TYPE.METHOD));
       }
 
-      // Output to the logger
-      if (logOutput.length > 0) {
-        __LOG__(logOutput);
-      } else {
-        __LOG__('No matches');
-      }
-
-      return javadocFileData;
+      return classBodyData;
     };
 
     function filter(data) {
@@ -176,17 +171,17 @@ module.exports = {
       return 0;
     }
 
-    function parseData(fileData, entityType) {
-      var javadocFileDataLines = [];
+    function parseData(javadocData, entityType) {
+      let javadocFileDataLines = [];
 
-      fileData.forEach(function (data) {
+      javadocData.forEach(function (data) {
         var lastObject = {
           name: "default",
           text: ""
         };
         var javadocCommentData = [];
 
-        if (entityType === ENTITY_TYPE.CLASS || entityType === ENTITY_TYPE.CLASSNODOCS) {
+        if (entityType === ENTITY_TYPE.CLASS) {
           if (data[0].indexOf('@IsTest') !== -1) {
             currentClassIsTest = true;
             return;
@@ -259,13 +254,8 @@ module.exports = {
     function getEntity(data, entityType) {
       let ret = undefined;
       if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
-      if (entityType === ENTITY_TYPE.CLASSNODOCS) ret = getClassNoDocs(data);
       if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
       if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
-      // if (!options.accessors.includes(ret.accessor)) {
-      //   __DBG__("Removing " + ret.text + " because accessor = " + ret.accessor);
-      //   return undefined;
-      // }
       return ret;
     }
 
@@ -277,7 +267,9 @@ module.exports = {
         text: data[4],
         type: data[3],
         descrip: "",
-        static: data[2] === "static"
+        static: data[2] === "static",
+        line: getLineNumber(data),
+        start: data.index
       };
       return ret;
     }
@@ -291,31 +283,49 @@ module.exports = {
         text: data[2] + ' ' +
           data[3] + ' ' +
           data[4] +
-          data[5]
+          data[5],
+        line: getLineNumber(data),
+        start: data.index
       };
       return ret;
     }
 
     function getClass(data) {
+      let endIndex = getEndIndex(data);
       var ret = {
-        name: data[3], // Class, Enum, etc.
+        name: data[3], // Class or Enum
         accessor: data[1],
         toc: data[4],
         text: data[4],
-        body: data[6].replace(/\s/g, "") // for Enums
+        body: data.input.substring(data.index, endIndex),
+        line: getLineNumber(data),
+        start: data.index,
+        end: endIndex
       };
       return ret;
     }
 
-    function getClassNoDocs(data) {
-      var ret = {
-        name: data[3], // Class, Enum, etc.
-        accessor: data[1],
-        toc: data[4],
-        text: data[4],
-        body: data[6].replace(/\s/g, "") // for Enums
-      };
-      return ret;
+    function getLineNumber(data) {
+      if (data.index === 0) return 1;
+      let codeBlock = data.input.substr(0, data.index);
+      let lineNum = (codeBlock.match(/\n/g || []).length) + 1;
+      return lineNum;
+    }
+
+    function getEndIndex(data) {
+      let codeBlock = data.input.substring(data.index, data.input.length);
+      let ob = 0;
+      let cb = 0;
+      let endIndex = undefined;
+      for(var i = 0; i < codeBlock.length; i++) {
+        if (codeBlock.charAt(i) === "{") ob++;
+        if (codeBlock.charAt(i) === "}") cb++;
+        if (ob !== 0 && cb !== 0 && ob === cb) {
+          endIndex = i + data.index + 1;
+          break;
+        };
+      }
+      return endIndex;
     }
 
     function escapeAngleBrackets(str) {
@@ -357,9 +367,10 @@ module.exports = {
           for (var a = 0; a < docCommentsFile.length; a++) {
             let commentData = docCommentsFile[a];
             let firstParam = true;
-            if (commentData === null) break;
+            if (commentData === null || commentData === undefined) break;
             for (var b = 0; b < commentData.length; b++) {
               (function (commentData) {
+                //if (commentData[b] === undefined) return;
                 var entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
                 var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
                 var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
@@ -502,7 +513,7 @@ module.exports = {
         var file = files[a];
         __LOG__("File: " + file);
         var contents = fs.readFileSync(file).toString();
-        var javadocMatches = extractJavadocData(contents);
+        var javadocMatches = parseCodeFile(contents);
         if (javadocMatches.length !== 0) {
           docComments[file] = javadocMatches;
         }
