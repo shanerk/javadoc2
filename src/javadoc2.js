@@ -280,7 +280,7 @@ module.exports = {
                   text = `\n---\n### ${classPath} ${entityType}`;
                   if (entityType === 'enum' && body !== undefined) {
                     text += '\n\n|Values|\n|:---|';
-                    body.split(',').forEach(function (enumText) {
+                    getEnumBody(body).forEach(function (enumText) {
                       text += `\n|${enumText}|`
                     });
                   }
@@ -372,6 +372,19 @@ module.exports = {
     };
 
     /** Utility Methods ***********************************************************************************************/
+
+    function getEnumBody(str) {
+      ret = [];
+      if (str === undefined) return ret;
+
+      str = str.replace(/[\s\n]/g,'');
+      str = str.substring(str.indexOf(`{`)+1, str.indexOf(`}`));
+      ret = str.split(`,`);
+
+      __DBG__(`str = ${str}`);
+
+      return ret;
+    }
 
     function matchAll(str, regexp) {
       let ret = [];
