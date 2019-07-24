@@ -120,6 +120,7 @@ module.exports = {
     /** Parse Class ***************************************************************************************************/
 
     function parseClass(text) {
+      __DBG__(`bodyx = ${text}`);
       let classBodyData = [];
       // Handle Properties
       let propertyData = merge(
@@ -242,7 +243,6 @@ module.exports = {
       const path = require("path");
       const mkdirp = require('mkdirp');
       let data = undefined;
-      __DBG__('formatData format = ' + options.format);
       if (options.format === "markdown") {
         let tocData = "";
         data = "";
@@ -512,7 +512,6 @@ module.exports = {
         level: undefined,
         isJavadocRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)))
       };
-      __DBG__(`data = ${JSON.stringify(data)}`);
       return ret;
     }
 
@@ -540,6 +539,7 @@ module.exports = {
     function setClassBodyX(classes) {
       classes.forEach(function(target) {
         target.bodyx = target.body;
+        target.bodyx = target.bodyx.replace(REGEX_JAVADOC, ``);
         classes.forEach(function(cur) {
           if (target !== cur) {
             let isChild = target.body.includes(cur.signature);
