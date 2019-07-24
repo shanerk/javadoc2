@@ -214,18 +214,16 @@ module.exports = {
           lastObject.text = lastObject.text.replace(/\/\*\*( )*/g,``);
           javadocCommentData.push(lastObject);
         } else {
-          // Add TODO for all types except: Enum
-          if (entityHeader.name !== "enum") {
-            javadocCommentData.push({ text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
-          }
+          javadocCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
         }
 
-        // Javadocs are pushed onto the stack after the header for all entity types except: Property
-        if (entityType != ENTITY_TYPE.PROPERTY) {
+        // Javadocs are pushed onto the stack after the header for all entity types except: Property, Enum
+        if (entityType != ENTITY_TYPE.PROPERTY && entityHeader.name != "enum") {
           javadocFileDataLines.push([entityHeader]);
           javadocFileDataLines.push(javadocCommentData);
         } else {
-          // For Property entities, add the javadoc as the descrip
+
+          // For Property & Enum entities, add the javadoc as the descrip
           entityHeader.descrip = javadocCommentData[0].text;
           javadocFileDataLines.push([entityHeader]);
         }
@@ -286,6 +284,7 @@ module.exports = {
 
                   /** Enum values  */
                   if (entityType === 'enum' && body !== undefined) {
+                    text += `\n${descrip}`;
                     text += '\n\n|Values|\n|:---|';
                     getEnumBody(body).forEach(function (enumText) {
                       text += `\n|${enumText}|`
@@ -497,6 +496,7 @@ module.exports = {
         start: data.index,
         end: endIndex,
         path: "",
+        descrip: "",
         level: undefined
       };
       __DBG__(`class = ${JSON.stringify(ret)}`);
