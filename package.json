@@ -1,7 +1,7 @@
 {
   "name": "javadoc2",
-  "version": "1.0.7",
-  "description": "Tool to generate JSON or Markdown from Javadoc comments and using glob patterns, for CLI and API.",
+  "version": "2.0.0",
+  "description": "Tool to parse Apex, Java and Javascript repos to generate Markdown or JSON API documentation.",
   "main": "src/javadoc2.js",
   "preferGlobal": true,
   "bin": {
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/allnulled/javadoc.git"
+    "url": "git+https://github.com/shanekenyon87/javadoc2.git"
   },
   "keywords": [
     "javadoc",
@@ -50,7 +50,7 @@
     "tags"
   ],
   "bugs": {
-    "url": "https://github.com/allnulled/javadoc/issues"
+    "url": "https://github.com/shanekenyon87/javadoc2/issues"
   },
-  "homepage": "https://github.com/allnulled/javadoc#readme"
+  "homepage": "https://github.com/shanekenyon87/javadoc2#readme"
 }
