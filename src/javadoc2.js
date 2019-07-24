@@ -214,7 +214,9 @@ module.exports = {
           lastObject.text = lastObject.text.replace(/\/\*\*( )*/g,``);
           javadocCommentData.push(lastObject);
         } else {
-          javadocCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
+          if (entityHeader.isJavadocRequired) {
+            javadocCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
+          }
         }
 
         // Javadocs are pushed onto the stack after the header for all entity types except: Property, Enum
@@ -261,8 +263,6 @@ module.exports = {
                 let body = commentData[b].body === undefined ? "" : commentData[b].body;
                 let descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
                 let codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
-
-                __DBG__(`type = ${entityType} text = ${text}`);
 
                 /** Code Blocks */
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
@@ -462,7 +462,8 @@ module.exports = {
         descrip: "",
         static: data[2] === "static",
         line: getLineNumber(data),
-        start: data.index
+        start: data.index,
+        isJavadocRequired: true
       };
       return ret;
     }
@@ -478,7 +479,8 @@ module.exports = {
           data[4] +
           data[5],
         line: getLineNumber(data),
-        start: data.index
+        start: data.index,
+        isJavadocRequired: true
       };
       return ret;
     }
@@ -492,14 +494,15 @@ module.exports = {
         text: data[4],
         body: data.input.substring(data.index, endIndex),
         line: getLineNumber(data),
-        signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace("  ", " ") + " ",
+        signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace(`  `, ` `) + " ",
         start: data.index,
         end: endIndex,
-        path: "",
-        descrip: "",
-        level: undefined
+        path: ``,
+        descrip: ``,
+        level: undefined,
+        isJavadocRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)))
       };
-      __DBG__(`class = ${JSON.stringify(ret)}`);
+      __DBG__(`data = ${JSON.stringify(data)}`);
       return ret;
     }
 
