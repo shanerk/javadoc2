@@ -1,15 +1,16 @@
 {
-  "name": "javadoc",
-  "version": "1.0.6",
+  "name": "javadoc2",
+  "version": "1.0.7",
   "description": "Tool to generate JSON or Markdown from Javadoc comments and using glob patterns, for CLI and API.",
-  "main": "src/javadoc.js",
+  "main": "src/javadoc2.js",
+  "preferGlobal": true,
   "bin": {
-    "javadoc": "bin/javadoc.cli.js"
+    "javadoc2": "bin/javadoc2.cli.js"
   },
   "scripts": {
-    "gitupload": "gitanoaddfiles bin/javadoc.cli.js  docs/README.* package* README.md  src/javadoc.js  test/* test/examples/* && gitanopush",
-    "test": "node test/javadoc.spec.js",
-    "coverage": "node_modules/.bin/rimraf coverage .nyc_output && node_modules/.bin/nyc --reporter=html node test/javadoc.spec.js"
+    "gitupload": "gitanoaddfiles bin/javadoc2.cli.js  docs/README.* package* README.md  src/javadoc2.js  test/* test/examples/* && gitanopush",
+    "test": "node test/javadoc2.spec.js",
+    "coverage": "node_modules/.bin/rimraf coverage .nyc_output && node_modules/.bin/nyc --reporter=html node test/javadoc2.spec.js"
   },
   "author": "",
   "license": "ISC",
