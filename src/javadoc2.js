@@ -1,7 +1,8 @@
 module.exports = {
   generate: function generate(optionsArg) {
     let options = undefined;
-    let currentClassIsTest = undefined;
+    let isTestClass = false;
+    let isDeprecatedClass = false;
 
     const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
@@ -165,18 +166,21 @@ module.exports = {
         let javadocCommentData = [];
 
         if (entityType === ENTITY_TYPE.CLASS) {
-          if (data[0].indexOf('@IsTest') !== -1) {
-            currentClassIsTest = true;
+          if (data[0].includes('@IsTest')) {
+            isTestClass = true;
             return;
-          } else {
-            currentClassIsTest = false;
           }
+          isDeprecatedClass = data[0].includes(`@Deprecated`) && header.level === 0;
         }
 
-        // Skip test methods and methods within test classes
-        if (entityType === ENTITY_TYPE.METHOD &&
-          (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest)
-        ) return;
+        // Skip test entities
+        if (
+          (data[0].indexOf('@IsTest') !== -1 ||
+          isTestClass ||
+          isDeprecatedClass) &&
+          entityType !== ENTITY_TYPE.CLASS) {
+            return;
+        }
 
         let entityHeader = header === undefined ? getEntity(data, entityType) : header;
 
@@ -184,7 +188,7 @@ module.exports = {
         if (entityHeader === undefined) return;
 
         // Process Javadocs, if any
-        if (data[0].match(REGEX_JAVADOC) !== null) {
+        if (data[0].match(REGEX_JAVADOC) !== null && !entityHeader.isDeprecated) {
           let javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
           let javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
           let attributeMatch = "default";
@@ -216,7 +220,7 @@ module.exports = {
           lastObject.text = lastObject.text.replace(/\/\*\*( )*/g,``);
           javadocCommentData.push(lastObject);
         } else {
-          if (entityHeader.isJavadocRequired) {
+          if (entityHeader.isJavadocRequired && !entityHeader.isDeprecated) {
             javadocCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
           }
         }
@@ -264,6 +268,8 @@ module.exports = {
                 let body = commentData[b].body === undefined ? "" : commentData[b].body;
                 let descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
                 let codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                let deprecated = commentData[b].isDeprecated ||
+                  (isDeprecatedClass && commentData[b].level > 0) ? ` (deprecated)` : ``;
 
                 /** Proper-case entityType */
                 if (entityType.length) {
@@ -287,8 +293,8 @@ module.exports = {
                 /** Classes & Enums */
                 if (entityType === 'Class' || entityType === 'Enum') {
                   entityType = entityType.toLowerCase(entityType);
-                  tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType})`);
-                  text = `\n---\n### ${classPath} ${entityType}`;
+                  tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType}) ${deprecated}`);
+                  text = `\n---\n### ${classPath} ${entityType}${deprecated}`;
 
                   /** Enum values  */
                   if (entityType === 'enum' && body !== undefined) {
@@ -301,8 +307,8 @@ module.exports = {
 
                 /** Methods */
                 } else if (entityType === 'Method') {
-                  tocData += (`\n   * ${escapeAngleBrackets(entityName)}`);
-                  text = `#### ${escapeAngleBrackets(text)}`;
+                  tocData += (`\n   * ${escapeAngleBrackets(entityName)}${deprecated}`);
+                  text = `#### ${escapeAngleBrackets(text)}${deprecated}`;
 
                 /** Parameters */
                 } else if (entityType === "Param") {
@@ -312,7 +318,7 @@ module.exports = {
                   }
                   let pname = text.substr(0, text.indexOf(" "));
                   let descrip = text.substr(text.indexOf(" "));
-                  text = `|${entityType}|${pname}|${descrip}|`;
+                  text = `|${entityType}|${pname}${deprecated}|${descrip}|`;
 
                 /** Return values */
                 } else if (entityType === "Return") {
@@ -331,7 +337,7 @@ module.exports = {
                   }
                   let static = commentData[b].static ? "Yes" : " ";
                   descrip = descrip.replace(/\/\*\*/g, '');
-                  text = `|${static}|${entitySubtype}|${text}|${descrip}|`;
+                  text = `|${static}|${entitySubtype}|${text}${deprecated}|${descrip}|`;
                 } else if (entityType === "Author") {
                   text = "";
                 }
@@ -480,6 +486,7 @@ module.exports = {
         static: data[2] === "static",
         line: getLineNumber(data),
         start: data.index,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: true
       };
       return ret;
@@ -497,6 +504,7 @@ module.exports = {
           data[5],
         line: getLineNumber(data),
         start: data.index,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: true
       };
       return ret;
@@ -518,6 +526,7 @@ module.exports = {
         path: ``,
         descrip: ``,
         level: undefined,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)))
       };
       return ret;
