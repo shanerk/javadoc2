@@ -98,6 +98,8 @@ module.exports = {
 
       classes = setLevels(classes).sort(ClassLevelComparator);
       classes = setClassPaths(classes);
+      // bodyx holds the class definition text minus the text of sub-classes
+      classes = setClassBodyX(classes);
 
       classData.forEach(function(data) {
         let parsedClass = parseData([data], ENTITY_TYPE.CLASS, classes[i]);
@@ -107,7 +109,7 @@ module.exports = {
         } else {
           fileData = fileData.concat(parsedClass);
         }
-        let members = parseClass(classes[i].body);
+        let members = parseClass(classes[i].bodyx);
         if (members !== undefined) fileData = fileData.concat(members);
         i++;
       });
@@ -248,9 +250,9 @@ module.exports = {
         for (let file in docComments) {
           let docCommentsFile = docComments[file];
           let firstProp = true;
+          let firstParam = true;
           for (let a = 0; a < docCommentsFile.length; a++) {
             let commentData = docCommentsFile[a];
-            let firstParam = true;
             if (commentData === null || commentData === undefined) break;
             for (let b = 0; b < commentData.length; b++) {
               (function (commentData) {
@@ -264,16 +266,23 @@ module.exports = {
                 let descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
                 let codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
 
+                /** Proper-case entityType */
+                if (entityType.length) {
+                  entityType = entityType[0].toUpperCase() + entityType.substr(1);
+                }
+                if (entityType === `Class`) {
+                  firstProp = true;
+                }
+                if (entityType === `Method`) {
+                  firstParam = true;
+                }
+
                 /** Code Blocks */
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
                   text = "";
                   codeBlock.forEach(function(block) {
                     text += "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n";
                   });
-                }
-
-                if (entityType.length) {
-                  entityType = entityType[0].toUpperCase() + entityType.substr(1);
                 }
 
                 /** Classes & Enums */
@@ -493,6 +502,7 @@ module.exports = {
         toc: data[4],
         text: data[4],
         body: data.input.substring(data.index, endIndex),
+        bodyx: undefined,
         line: getLineNumber(data),
         signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace(`  `, ` `) + " ",
         start: data.index,
@@ -516,8 +526,8 @@ module.exports = {
     function recLevel(target, classes, level) {
       classes.forEach(function(cur) {
         if (target !== cur) {
-          let child = cur.body.includes(target.signature);
-          if (child) {
+          let isChild = cur.body.includes(target.signature);
+          if (isChild) {
             level = recLevel(cur, classes, level + 1);
           } else {
             classes = classes.splice(classes.indexOf(target), 1);
@@ -527,19 +537,34 @@ module.exports = {
       return level;
     }
 
-    function setClassPaths(classes) {
-      classes.forEach(function(cur) {
-        cur.path = recPath(cur, cur.path, classes.slice(0), 0) + cur.toc;
+    function setClassBodyX(classes) {
+      classes.forEach(function(target) {
+        target.bodyx = target.body;
+        classes.forEach(function(cur) {
+          if (target !== cur) {
+            let isChild = target.body.includes(cur.signature);
+            if (isChild) {
+              target.bodyx = target.bodyx.replace(cur.body, ``);
+            }
+          }
+        });
       });
       return classes;
     }
 
-    function recPath(target, path, classes, level) {
+    function setClassPaths(classes) {
+      classes.forEach(function(cur) {
+        cur.path = recPath(cur, cur.path, classes.slice(0)) + cur.toc;
+      });
+      return classes;
+    }
+
+    function recPath(target, path, classes) {
       classes.forEach(function(cur) {
         if (target !== cur) {
-          let child = cur.body.includes(target.signature);
-          if (child) {
-            path += recPath(cur, cur.toc, classes, level + 1) + ".";
+          let isChild = cur.body.includes(target.signature);
+          if (isChild) {
+            path += recPath(cur, cur.toc, classes) + ".";
           } else {
             classes = classes.splice(classes.indexOf(target), 1);
           }
