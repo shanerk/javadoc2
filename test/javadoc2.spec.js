@@ -1,6 +1,6 @@
 var report = require("assertivity").generate().report;
 var exec = require("execute-command-sync");
-var javadoc = require("../src/javadoc.js");
+var javadoc = require("../src/javadoc2.js");
 var fs = require("fs");
 var path = require("path");
 var rimraf = require("rimraf");
