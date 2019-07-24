@@ -82,8 +82,8 @@ module.exports = {
       let i = 0;
 
       classData = merge(
-        matchAll(text, REGEX_CLASS),
-        matchAll(text, REGEX_CLASS_NODOC),
+        matchAll(text, REGEX_CLASS, true),
+        matchAll(text, REGEX_CLASS_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -109,7 +109,7 @@ module.exports = {
         } else {
           fileData = fileData.concat(parsedClass);
         }
-        let members = parseClass(classes[i].bodyx);
+        let members = parseClass(classes[i]);
         if (members !== undefined) fileData = fileData.concat(members);
         i++;
       });
@@ -119,13 +119,12 @@ module.exports = {
 
     /** Parse Class ***************************************************************************************************/
 
-    function parseClass(text) {
-      __DBG__(`bodyx = ${text}`);
+    function parseClass(target) {
       let classBodyData = [];
       // Handle Properties
       let propertyData = merge(
-        matchAll(text, REGEX_PROPERTY),
-        matchAll(text, REGEX_PROPERTY_NODOC),
+        matchAll(target.bodyx, REGEX_PROPERTY, true),
+        matchAll(target.bodyx, REGEX_PROPERTY_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -138,8 +137,8 @@ module.exports = {
 
       // Handle Methods
       let methodData = merge(
-        matchAll(text, REGEX_METHOD),
-        matchAll(text, REGEX_METHOD_NODOC),
+        matchAll(target.bodyx, REGEX_METHOD, true),
+        matchAll(target.bodyx, REGEX_METHOD_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -409,22 +408,31 @@ module.exports = {
       return ret;
     }
 
-    function matchAll(str, regexp) {
+    function matchAll(str, regexp, excludeComments) {
       let ret = [];
       let result = undefined;
+      let i = 0;
+      let nojavadocs = str.replace(REGEX_JAVADOC, ``).replace(/\/\/.*/g, ``);
       while (result = regexp.exec(str)) {
-        ret.push(result);
+        if (nojavadocs.includes(result[0]) ||
+          result[0].trim().substring(0,3) === `/**` ||
+          !excludeComments
+          ) {
+          ret.push(result);
+        } else {
+          __DBG__(`Entity ${result[4]} commented out.`);
+        }
       }
       return ret;
     }
 
     function filter(data) {
       let ret = [];
-      data.forEach(function (item) {
-        if (options.accessors.includes(item[1])) ret.push(item);
+      data.forEach(function (target) {
+        if (options.accessors.includes(target[1])) ret.push(target);
       });
       if (ret.length < data.length)
-        __DBG__("Filtered out " + (data.length - ret.length) + " entities based on accessors.");
+        __DBG__(`Filtered out ${data.length - ret.length} entities based on accessors.`);
       return ret;
     }
 
@@ -539,7 +547,6 @@ module.exports = {
     function setClassBodyX(classes) {
       classes.forEach(function(target) {
         target.bodyx = target.body;
-        target.bodyx = target.bodyx.replace(REGEX_JAVADOC, ``);
         classes.forEach(function(cur) {
           if (target !== cur) {
             let isChild = target.body.includes(cur.signature);
