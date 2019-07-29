@@ -1,7 +1,8 @@
 module.exports = {
   generate: function generate(optionsArg) {
     let options = undefined;
-    let currentClassIsTest = undefined;
+    let isTestClass = false;
+    let isDeprecatedClass = false;
 
     const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
@@ -47,8 +48,8 @@ module.exports = {
 
     return (function () {
       normalizeOptions();
-      var raw = iterateFiles();
-      var data = formatOutput(raw);
+      let raw = iterateFiles();
+      let data = formatOutput(raw);
       return data;
     })();
 
@@ -82,8 +83,8 @@ module.exports = {
       let i = 0;
 
       classData = merge(
-        matchAll(text, REGEX_CLASS),
-        matchAll(text, REGEX_CLASS_NODOC),
+        matchAll(text, REGEX_CLASS, true),
+        matchAll(text, REGEX_CLASS_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -98,6 +99,8 @@ module.exports = {
 
       classes = setLevels(classes).sort(ClassLevelComparator);
       classes = setClassPaths(classes);
+      // bodyx holds the class definition text minus the text of sub-classes
+      classes = setClassBodyX(classes);
 
       classData.forEach(function(data) {
         let parsedClass = parseData([data], ENTITY_TYPE.CLASS, classes[i]);
@@ -107,7 +110,7 @@ module.exports = {
         } else {
           fileData = fileData.concat(parsedClass);
         }
-        let members = parseClass(classes[i].body);
+        let members = parseClass(classes[i]);
         if (members !== undefined) fileData = fileData.concat(members);
         i++;
       });
@@ -117,12 +120,12 @@ module.exports = {
 
     /** Parse Class ***************************************************************************************************/
 
-    function parseClass(text) {
+    function parseClass(target) {
       let classBodyData = [];
       // Handle Properties
       let propertyData = merge(
-        matchAll(text, REGEX_PROPERTY),
-        matchAll(text, REGEX_PROPERTY_NODOC),
+        matchAll(target.bodyx, REGEX_PROPERTY, true),
+        matchAll(target.bodyx, REGEX_PROPERTY_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -135,8 +138,8 @@ module.exports = {
 
       // Handle Methods
       let methodData = merge(
-        matchAll(text, REGEX_METHOD),
-        matchAll(text, REGEX_METHOD_NODOC),
+        matchAll(target.bodyx, REGEX_METHOD, true),
+        matchAll(target.bodyx, REGEX_METHOD_NODOC, true),
         4,
         4
       ).sort(EntityComparator);
@@ -156,40 +159,43 @@ module.exports = {
       let javadocFileDataLines = [];
 
       javadocData.forEach(function (data) {
-        var lastObject = {
+        let lastObject = {
           name: "default",
           text: ""
         };
-        var javadocCommentData = [];
+        let javadocCommentData = [];
 
         if (entityType === ENTITY_TYPE.CLASS) {
-          if (data[0].indexOf('@IsTest') !== -1) {
-            currentClassIsTest = true;
+          if (data[0].includes('@IsTest')) {
+            isTestClass = true;
             return;
-          } else {
-            currentClassIsTest = false;
           }
+          isDeprecatedClass = data[0].includes(`@Deprecated`) && header.level === 0;
         }
 
-        // Skip test methods and methods within test classes
-        if (entityType === ENTITY_TYPE.METHOD &&
-          (data[0].indexOf('@IsTest') !== -1 || currentClassIsTest)
-        ) return;
+        // Skip test entities
+        if (
+          (data[0].indexOf('@IsTest') !== -1 ||
+          isTestClass ||
+          isDeprecatedClass) &&
+          entityType !== ENTITY_TYPE.CLASS) {
+            return;
+        }
 
-        var entityHeader = header === undefined ? getEntity(data, entityType) : header;
+        let entityHeader = header === undefined ? getEntity(data, entityType) : header;
 
         // Skip invalid entities, or entities that have non-included accesors (see getEntity() method)
         if (entityHeader === undefined) return;
 
         // Process Javadocs, if any
-        if (data[0].match(REGEX_JAVADOC) !== null) {
-          var javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
-          var javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
-          var attributeMatch = "default";
+        if (data[0].match(REGEX_JAVADOC) !== null && !entityHeader.isDeprecated) {
+          let javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
+          let javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
+          let attributeMatch = "default";
 
           javadocLines.forEach(function (javadocLine) {
-            var attrMatch = javadocLine.match(REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE);
-            var isNewMatch = (!!attrMatch);
+            let attrMatch = javadocLine.match(REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE);
+            let isNewMatch = (!!attrMatch);
             if (isNewMatch) {
               attributeMatch = attrMatch[0].replace(/_/g, " ");
             }
@@ -211,20 +217,21 @@ module.exports = {
                 });
             }
           });
+          lastObject.text = lastObject.text.replace(/\/\*\*( )*/g,``);
           javadocCommentData.push(lastObject);
         } else {
-          // Add TODO for all types except: Enum
-          if (entityHeader.name !== "enum") {
-            javadocCommentData.push({ text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
+          if (entityHeader.isJavadocRequired && !entityHeader.isDeprecated) {
+            javadocCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
           }
         }
 
-        // Javadocs are pushed onto the stack after the header for all entity types except: Property
-        if (entityType != ENTITY_TYPE.PROPERTY) {
+        // Javadocs are pushed onto the stack after the header for all entity types except: Property, Enum
+        if (entityType != ENTITY_TYPE.PROPERTY && entityHeader.name != "enum") {
           javadocFileDataLines.push([entityHeader]);
           javadocFileDataLines.push(javadocCommentData);
         } else {
-          // For property entities, add the javadoc right to the object
+
+          // For Property & Enum entities, add the javadoc as the descrip
           entityHeader.descrip = javadocCommentData[0].text;
           javadocFileDataLines.push([entityHeader]);
         }
@@ -239,77 +246,98 @@ module.exports = {
       const path = require("path");
       const mkdirp = require('mkdirp');
       let data = undefined;
-      __DBG__('formatData format = ' + options.format);
       if (options.format === "markdown") {
         let tocData = "";
         data = "";
 
-        for (var file in docComments) {
+        for (let file in docComments) {
           let docCommentsFile = docComments[file];
           let firstProp = true;
-          for (var a = 0; a < docCommentsFile.length; a++) {
+          let firstParam = true;
+          for (let a = 0; a < docCommentsFile.length; a++) {
             let commentData = docCommentsFile[a];
-            let firstParam = true;
             if (commentData === null || commentData === undefined) break;
-            for (var b = 0; b < commentData.length; b++) {
+            for (let b = 0; b < commentData.length; b++) {
               (function (commentData) {
-                //if (commentData[b] === undefined) return;
-                var entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
-                var text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
-                var entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
-                var entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
-                var classPath = commentData[b].path === undefined ? "" : commentData[b].path.replace(/\n/gm, " ");
-                var body = commentData[b].body === undefined ? "" : commentData[b].body;
-                var descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
-                var codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                /** Stage the data */
+                let entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
+                let text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
+                let entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
+                let entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
+                let classPath = commentData[b].path === undefined ? "" : commentData[b].path.replace(/\n/gm, " ");
+                let body = commentData[b].body === undefined ? "" : commentData[b].body;
+                let descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
+                let codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                let deprecated = commentData[b].isDeprecated ||
+                  (isDeprecatedClass && commentData[b].level > 0) ? ` (deprecated)` : ``;
 
+                /** Proper-case entityType */
+                if (entityType.length) {
+                  entityType = entityType[0].toUpperCase() + entityType.substr(1);
+                }
+                if (entityType === `Class`) {
+                  firstProp = true;
+                }
+                if (entityType === `Method`) {
+                  firstParam = true;
+                }
+
+                /** Code Blocks */
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
                   text = "";
                   codeBlock.forEach(function(block) {
-                    // capture group [1] has the raw code sample
                     text += "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n";
                   });
                 }
 
-                if (entityType.length) {
-                  entityType = entityType[0].toUpperCase() + entityType.substr(1);
-                }
+                /** Classes & Enums */
                 if (entityType === 'Class' || entityType === 'Enum') {
                   entityType = entityType.toLowerCase(entityType);
-                  tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType})`);
-                  text = `\n---\n### ${classPath} ${entityType}`;
+                  tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType}) ${deprecated}`);
+                  text = `\n---\n### ${classPath} ${entityType}${deprecated}`;
+
+                  /** Enum values  */
                   if (entityType === 'enum' && body !== undefined) {
+                    text += `\n${descrip}`;
                     text += '\n\n|Values|\n|:---|';
                     getEnumBody(body).forEach(function (enumText) {
                       text += `\n|${enumText}|`
                     });
                   }
+
+                /** Methods */
                 } else if (entityType === 'Method') {
-                  tocData += (`\n   * ${escapeAngleBrackets(entityName)}`);
-                  text = `#### ${escapeAngleBrackets(text)}`;
+                  tocData += (`\n   * ${escapeAngleBrackets(entityName)}${deprecated}`);
+                  text = `#### ${escapeAngleBrackets(text)}${deprecated}`;
+
+                /** Parameters */
                 } else if (entityType === "Param") {
                   if (firstParam) {
                     data += '\n##### Parameters:\n\n|Type|Name|Description|\n|:---|:---|:---|\n';
                     firstParam = false;
                   }
-                  var pname = text.substr(0, text.indexOf(" "));
-                  var descrip = text.substr(text.indexOf(" "));
-                  text = `|${entityType}|${pname}|${descrip}|`;
+                  let pname = text.substr(0, text.indexOf(" "));
+                  let descrip = text.substr(text.indexOf(" "));
+                  text = `|${entityType}|${pname}${deprecated}|${descrip}|`;
+
+                /** Return values */
                 } else if (entityType === "Return") {
                   if (firstParam) {
                     data += '\n|Type|Name|Description|\n|:---|:---|:---|\n';
                     firstParam = false;
                   }
                   text = `|${entityType}| |${text}|`;
+
+                /** Properties */
                 } else if (entityType === "Property") {
                   if (firstProp) {
                     data += '\n#### Properties\n\n|Static?|Type|Property|Description|' +
                       '\n|:---|:---|:---|:---|\n';
                     firstProp = false;
                   }
-                  var static = commentData[b].static ? "Yes" : " ";
+                  let static = commentData[b].static ? "Yes" : " ";
                   descrip = descrip.replace(/\/\*\*/g, '');
-                  text = `|${static}|${entitySubtype}|${text}|${descrip}|`;
+                  text = `|${static}|${entitySubtype}|${text}${deprecated}|${descrip}|`;
                 } else if (entityType === "Author") {
                   text = "";
                 }
@@ -319,22 +347,26 @@ module.exports = {
           }
           data += "\n";
         }
+        /** File header */
         data = "# API Reference\n" + tocData + "\n" + data;
       } else {
         data = JSON.stringify(docComments, null, 4);
       }
+
       if (options.output === undefined) {
         console.log(data);
+
+      /** Write out to the specified file */
       } else {
         __LOG__("Writing results to: " + options.output);
-        var folder = path.dirname(options.output);
+        let folder = path.dirname(options.output);
         if (fs.existsSync(folder)) {
           if (fs.lstatSync(folder).isDirectory()) {
             fs.writeFileSync(options.output, data, "utf8");
           } else {
             throw {
               name: "DumpingResultsError",
-              message: "Destiny folder is already a file"
+              message: "Destination folder is already a file"
             };
           }
         } else {
@@ -350,7 +382,7 @@ module.exports = {
     function iterateFiles() {
       const globule = require("globule");
       const fs = require("fs");
-      var docComments = {};
+      let docComments = {};
       __LOG__("Starting.");
       __LOG__("Files:", options.include);
       __LOG__("Excluded:", options.exclude);
@@ -359,11 +391,11 @@ module.exports = {
       __LOG__("Accessors:", options.accessors);
       const files = globule.find([].concat(options.include).concat(options.exclude));
       __LOG__("Files found: " + files.length);
-      for (var a = 0; a < files.length; a++) {
-        var file = files[a];
+      for (let a = 0; a < files.length; a++) {
+        let file = files[a];
         __LOG__("File: " + file);
-        var contents = fs.readFileSync(file).toString();
-        var javadocMatches = parseFile(contents);
+        let contents = fs.readFileSync(file).toString();
+        let javadocMatches = parseFile(contents);
         if (javadocMatches.length !== 0) {
           docComments[file] = javadocMatches;
         }
@@ -374,39 +406,44 @@ module.exports = {
     /** Utility Methods ***********************************************************************************************/
 
     function getEnumBody(str) {
-      ret = [];
+      let ret = [];
       if (str === undefined) return ret;
-
       str = str.replace(/[\s\n]/g,'');
       str = str.substring(str.indexOf(`{`)+1, str.indexOf(`}`));
       ret = str.split(`,`);
-
-      __DBG__(`str = ${str}`);
-
       return ret;
     }
 
-    function matchAll(str, regexp) {
+    function matchAll(str, regexp, excludeComments) {
       let ret = [];
-      let result;
+      let result = undefined;
+      let i = 0;
+      let nojavadocs = str.replace(REGEX_JAVADOC, ``).replace(/\/\/.*/g, ``);
       while (result = regexp.exec(str)) {
-        ret.push(result);
+        if (nojavadocs.includes(result[0]) ||
+          result[0].trim().substring(0,3) === `/**` ||
+          !excludeComments
+          ) {
+          ret.push(result);
+        } else {
+          __DBG__(`Entity ${result[4]} commented out.`);
+        }
       }
       return ret;
     }
 
     function filter(data) {
       let ret = [];
-      data.forEach(function (item) {
-        if (options.accessors.includes(item[1])) ret.push(item);
+      data.forEach(function (target) {
+        if (options.accessors.includes(target[1])) ret.push(target);
       });
       if (ret.length < data.length)
-        __DBG__("Filtered out " + (data.length - ret.length) + " entities based on accessors.");
+        __DBG__(`Filtered out ${data.length - ret.length} entities based on accessors.`);
       return ret;
     }
 
     function merge(data1, data2, key1, key2) {
-      var keys = [];
+      let keys = [];
       data1.forEach(function (item) {
         keys.push(item[key1]);
       });
@@ -448,14 +485,16 @@ module.exports = {
         descrip: "",
         static: data[2] === "static",
         line: getLineNumber(data),
-        start: data.index
+        start: data.index,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
+        isJavadocRequired: true
       };
       return ret;
     }
 
     function getMethod(data) {
       data[2] = data[2] === "override" ? "" : data[2];
-      var ret = {
+      let ret = {
         name: "Method",
         accessor: data[1],
         toc: data[4] + data[5],
@@ -464,25 +503,31 @@ module.exports = {
           data[4] +
           data[5],
         line: getLineNumber(data),
-        start: data.index
+        start: data.index,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
+        isJavadocRequired: true
       };
       return ret;
     }
 
     function getClass(data) {
       let endIndex = getEndIndex(data);
-      var ret = {
+      let ret = {
         name: data[3], // Class or Enum
         accessor: data[1],
         toc: data[4],
         text: data[4],
         body: data.input.substring(data.index, endIndex),
+        bodyx: undefined,
         line: getLineNumber(data),
-        signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace("  ", " ") + " ",
+        signature: (data[1] + " " + data[2] + " " + data[3] + " " + data[4]).replace(`  `, ` `) + " ",
         start: data.index,
         end: endIndex,
-        path: "",
-        level: undefined
+        path: ``,
+        descrip: ``,
+        level: undefined,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
+        isJavadocRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)))
       };
       return ret;
     }
@@ -497,8 +542,8 @@ module.exports = {
     function recLevel(target, classes, level) {
       classes.forEach(function(cur) {
         if (target !== cur) {
-          let child = cur.body.includes(target.signature);
-          if (child) {
+          let isChild = cur.body.includes(target.signature);
+          if (isChild) {
             level = recLevel(cur, classes, level + 1);
           } else {
             classes = classes.splice(classes.indexOf(target), 1);
@@ -508,19 +553,34 @@ module.exports = {
       return level;
     }
 
-    function setClassPaths(classes) {
-      classes.forEach(function(cur) {
-        cur.path = recPath(cur, cur.path, classes.slice(0), 0) + cur.toc;
+    function setClassBodyX(classes) {
+      classes.forEach(function(target) {
+        target.bodyx = target.body;
+        classes.forEach(function(cur) {
+          if (target !== cur) {
+            let isChild = target.body.includes(cur.signature);
+            if (isChild) {
+              target.bodyx = target.bodyx.replace(cur.body, ``);
+            }
+          }
+        });
       });
       return classes;
     }
 
-    function recPath(target, path, classes, level) {
+    function setClassPaths(classes) {
+      classes.forEach(function(cur) {
+        cur.path = recPath(cur, cur.path, classes.slice(0)) + cur.toc;
+      });
+      return classes;
+    }
+
+    function recPath(target, path, classes) {
       classes.forEach(function(cur) {
         if (target !== cur) {
-          let child = cur.body.includes(target.signature);
-          if (child) {
-            path += recPath(cur, cur.toc, classes, level + 1) + ".";
+          let isChild = cur.body.includes(target.signature);
+          if (isChild) {
+            path += recPath(cur, cur.toc, classes) + ".";
           } else {
             classes = classes.splice(classes.indexOf(target), 1);
           }
@@ -555,7 +615,7 @@ module.exports = {
       let cb = 0;
       let endIndex = undefined;
 
-      for(var i = 0; i < codeBlock.length; i++) {
+      for(let i = 0; i < codeBlock.length; i++) {
         if (codeBlock.charAt(i) === "{") ob++;
         if (codeBlock.charAt(i) === "}") cb++;
         if (ob !== 0 && cb !== 0 && ob === cb) {
@@ -595,7 +655,7 @@ module.exports = {
     function undent(str, remove) {
       let ret = "";
       let count = 0;
-      for (var i = 0; i < str.length; i++) {
+      for (let i = 0; i < str.length; i++) {
         let c = str.charAt(i);
         if ((c === " ") && count < remove) {
           count++;
@@ -610,7 +670,7 @@ module.exports = {
 
     function __DBG__(msg) {
       ///*
-      var otherArgs = Array.prototype.slice.call(arguments);
+      let otherArgs = Array.prototype.slice.call(arguments);
       otherArgs.shift();
       console.log.apply(console, ["[DEBUGGING] " + msg].concat(otherArgs));
       //*/
@@ -620,7 +680,7 @@ module.exports = {
       if (options.output === undefined) {
         return;
       }
-      var otherArgs = Array.prototype.slice.call(arguments);
+      let otherArgs = Array.prototype.slice.call(arguments);
       otherArgs.shift();
       console.log.apply(console, ["[javadoc2] " + msg].concat(otherArgs));
     }
