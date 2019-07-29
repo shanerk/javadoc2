@@ -10,7 +10,7 @@ module.exports = {
     const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
     const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
     const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
-    const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)/gm;
+    const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -283,9 +283,10 @@ module.exports = {
 
                 /** Code Blocks */
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
-                  text = "";
                   codeBlock.forEach(function(block) {
-                    text += "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n";
+                    text = text.replace(block[0].replace(/\n/gm, ` `),
+                      "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n"
+                    );
                   });
                 }
 
