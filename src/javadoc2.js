@@ -230,9 +230,8 @@ module.exports = {
           javadocFileDataLines.push([entityHeader]);
           javadocFileDataLines.push(javadocCommentData);
         } else {
-
           // For Property & Enum entities, add the javadoc as the descrip
-          entityHeader.descrip = javadocCommentData[0].text;
+          if (!entityHeader.isDeprecated) entityHeader.descrip = javadocCommentData[0].text;
           javadocFileDataLines.push([entityHeader]);
         }
       });
@@ -337,7 +336,7 @@ module.exports = {
                   }
                   let static = commentData[b].static ? "Yes" : " ";
                   descrip = descrip.replace(/\/\*\*/g, '');
-                  text = `|${static}|${entitySubtype}|${text}${deprecated}|${descrip}|`;
+                  text = `|${static}|${entitySubtype}|${text}|${descrip}${deprecated}|`;
                 } else if (entityType === "Author") {
                   text = "";
                 }
