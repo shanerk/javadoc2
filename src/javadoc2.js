@@ -10,7 +10,7 @@ module.exports = {
     const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
     const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
     const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
-    const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
+    const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)/gm;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -230,8 +230,9 @@ module.exports = {
           javadocFileDataLines.push([entityHeader]);
           javadocFileDataLines.push(javadocCommentData);
         } else {
+
           // For Property & Enum entities, add the javadoc as the descrip
-          if (!entityHeader.isDeprecated) entityHeader.descrip = javadocCommentData[0].text;
+          entityHeader.descrip = javadocCommentData[0].text;
           javadocFileDataLines.push([entityHeader]);
         }
       });
@@ -254,21 +255,21 @@ module.exports = {
           let firstProp = true;
           let firstParam = true;
           for (let a = 0; a < docCommentsFile.length; a++) {
-            let cdataList = docCommentsFile[a];
-            if (cdataList === null || cdataList === undefined) break;
-            for (let b = 0; b < cdataList.length; b++) {
-              (function (cdata) {
+            let commentData = docCommentsFile[a];
+            if (commentData === null || commentData === undefined) break;
+            for (let b = 0; b < commentData.length; b++) {
+              (function (commentData) {
                 /** Stage the data */
-                let entityType = cdata[b].name === undefined ? "" : cdata[b].name.replace(/^@/g, "");
-                let text = cdata[b].text === undefined ? "" : cdata[b].text.replace(/\n/gm, " ").trim();
-                let entitySubtype = cdata[b].type === undefined ? "" : cdata[b].type.replace(/\n/gm, " ");
-                let entityName = cdata[b].toc === undefined ? "" : cdata[b].toc.replace(/\n/gm, " ");
-                let classPath = cdata[b].path === undefined ? "" : cdata[b].path.replace(/\n/gm, " ");
-                let body = cdata[b].body === undefined ? "" : cdata[b].body;
-                let descrip = cdata[b].descrip === undefined ? "" : cdata[b].descrip.replace(/\n/gm, " ").trim();
-                let codeBlock = matchAll(cdata[b].text, REGEX_JAVADOC_CODE_BLOCK);
-                let deprecated = cdata[b].isDeprecated ||
-                  (isDeprecatedClass && cdata[b].level > 0) ? ` (deprecated)` : ``;
+                let entityType = commentData[b].name === undefined ? "" : commentData[b].name.replace(/^@/g, "");
+                let text = commentData[b].text === undefined ? "" : commentData[b].text.replace(/\n/gm, " ");
+                let entitySubtype = commentData[b].type === undefined ? "" : commentData[b].type.replace(/\n/gm, " ");
+                let entityName = commentData[b].toc === undefined ? "" : commentData[b].toc.replace(/\n/gm, " ");
+                let classPath = commentData[b].path === undefined ? "" : commentData[b].path.replace(/\n/gm, " ");
+                let body = commentData[b].body === undefined ? "" : commentData[b].body;
+                let descrip = commentData[b].descrip === undefined ? "" : commentData[b].descrip.replace(/\n/gm, " ");
+                let codeBlock = matchAll(commentData[b].text, REGEX_JAVADOC_CODE_BLOCK);
+                let deprecated = commentData[b].isDeprecated ||
+                  (isDeprecatedClass && commentData[b].level > 0) ? ` (deprecated)` : ``;
 
                 /** Proper-case entityType */
                 if (entityType.length) {
@@ -283,10 +284,9 @@ module.exports = {
 
                 /** Code Blocks */
                 if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
+                  text = "";
                   codeBlock.forEach(function(block) {
-                    text = text.replace(block[0].replace(/\n/gm, ` `),
-                      "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n"
-                    );
+                    text += "\n##### Example:\n```" + getLang(file) + undentBlock(block[1]) + "```\n";
                   });
                 }
 
@@ -335,14 +335,14 @@ module.exports = {
                       '\n|:---|:---|:---|:---|\n';
                     firstProp = false;
                   }
-                  let static = cdata[b].static ? "Yes" : " ";
+                  let static = commentData[b].static ? "Yes" : " ";
                   descrip = descrip.replace(/\/\*\*/g, '');
-                  text = `|${static}|${entitySubtype}|${text}|${descrip}${deprecated}|`;
+                  text = `|${static}|${entitySubtype}|${text}${deprecated}|${descrip}|`;
                 } else if (entityType === "Author") {
                   text = "";
                 }
                 data += `${text}\n`;
-              })(cdataList);
+              })(commentData);
             }
           }
           data += "\n";
