@@ -12,10 +12,12 @@ module.exports = {
     const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
     const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
     const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
+    const REGEX_ACCESSORS = /(global|public)/g;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /([\w]+)\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/.source,
+      REGEX_ACCESSORS.source +
+      /\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/.source,
       'gm'
     );
     const REGEX_CLASS = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CLASS_NODOC.source, 'gm');
@@ -23,15 +25,26 @@ module.exports = {
 
     const REGEX_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /([\w]+)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
+      REGEX_ACCESSORS.source +
+      /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
       'gm'
     );
     const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
     __DBG__('REGEX_METHOD = ' + REGEX_METHOD);
 
+    const REGEX_CONSTRUCTOR_NODOC = new RegExp(
+      REGEX_ATTRIBUTES.source +
+      REGEX_ACCESSORS.source +
+      /[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
+      'gm'
+    );
+    const REGEX_CONSTRUCTOR = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CONSTRUCTOR_NODOC.source, 'gm');
+    __DBG__('REGEX_CONSTRUCTOR = ' + REGEX_CONSTRUCTOR);
+
     const REGEX_PROPERTY_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /(global|public)\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
+      REGEX_ACCESSORS.source +
+      /\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/.source,
       'gm'
     );
     const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
@@ -42,7 +55,8 @@ module.exports = {
     const ENTITY_TYPE = {
       CLASS: 1,
       METHOD: 2,
-      PROPERTY: 3
+      PROPERTY: 3,
+      CONSTRUCTOR: 4
     }
 
     ///// Main /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +131,21 @@ module.exports = {
 
     ///// Parse Class //////////////////////////////////////////////////////////////////////////////////////////////////
     function parseClass(target) {
-      let classBodyData = [];
+      let children = [];
+
+      ///// Handle Constructors
+      let constructorData = merge(
+        matchAll(target.bodyCodeOnly, REGEX_CONSTRUCTOR, true),
+        matchAll(target.bodyCodeOnly, REGEX_CONSTRUCTOR_NODOC, true),
+        4,
+        4
+      );
+      constructorData = filter(constructorData);
+      __LOG__("Constructors = " + constructorData.length);
+
+      if (constructorData.length > 0) {
+        children = children.concat(parseData(constructorData, ENTITY_TYPE.CONSTRUCTOR));
+      }
 
       ///// Handle Methods
       let methodData = merge(
@@ -130,7 +158,7 @@ module.exports = {
       __LOG__("Methods = " + methodData.length);
 
       if (methodData.length > 0) {
-        classBodyData = classBodyData.concat(parseData(methodData, ENTITY_TYPE.METHOD));
+        children = children.concat(parseData(methodData, ENTITY_TYPE.METHOD));
       }
 
       ///// Handle Properties
@@ -144,10 +172,10 @@ module.exports = {
       __LOG__("Properties = " + propertyData.length);
 
       if (propertyData.length > 0) {
-        classBodyData = classBodyData.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
+        children = children.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
       }
 
-      return classBodyData;
+      return children;
     };
 
     ///// Parse Data ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -492,6 +520,7 @@ module.exports = {
       if (entityType === ENTITY_TYPE.CLASS) ret = getClass(data);
       if (entityType === ENTITY_TYPE.METHOD) ret = getMethod(data);
       if (entityType === ENTITY_TYPE.PROPERTY) ret = getProp(data);
+      if (entityType === ENTITY_TYPE.CONSTRUCTOR) ret = getConstructor(data);
       return ret;
     }
 
@@ -523,6 +552,21 @@ module.exports = {
           data[3] + ' ' +
           data[4] +
           data[5],
+        line: getLineNumber(data),
+        start: data.index,
+        isDeprecated: (data[0].includes(`@Deprecated`)),
+        isJavadocRequired: true,
+        isExclude: isExcluded(data)
+      };
+      return ret;
+    }
+
+    function getConstructor(data) {
+      let ret = {
+        name: "Method",
+        accessor: data[1],
+        toc: data[2],
+        text: data[2] + ' ' + data[3] ,
         line: getLineNumber(data),
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
