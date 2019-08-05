@@ -4,29 +4,42 @@ module.exports = {
     let isTestClass = false;
     let isDeprecatedClass = false;
 
+    const CLASS_TYPES = [`class`, `interface`];
+    const CLASS_AND_ENUM_TYPES = [`class`, `interface`, `enum`];
+    const HIDDEN_TAGS = [`@exclude`, `@hidden`];
+
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
     const REGEX_JAVADOC = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
     const REGEX_WS = /\s*/;
+    const REGEX_NBWS = /[ \t]*/;
     const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
     const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
     const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
     const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
-    const REGEX_ACCESSORS = /(global|public)/g;
+    const REGEX_ACCESSORS = /^[ \t]*(global|public)/g;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
       REGEX_ACCESSORS.source +
-      /\s*([\w\s]*)\s+(class|enum)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/.source,
+      /\s*([\w\s]*)\s+(class|enum|interface)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/.source,
       'gm'
     );
     const REGEX_CLASS = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CLASS_NODOC.source, 'gm');
     __DBG__('REGEX_CLASS = ' + REGEX_CLASS);
 
+    const REGEX_ABSTRACT_METHOD_NODOC = new RegExp(
+      REGEX_ATTRIBUTES.source +
+      /^[ \t]*()()(?!return)([\w]+)[ \t]+(?!for)([\w]+)[ \t]*(\([^\)]*\))\s*;/.source,
+      'gm'
+    )
+    const REGEX_ABSTRACT_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_ABSTRACT_METHOD_NODOC.source, 'gm');
+    __DBG__('REGEX_ABSTRACT_METHOD = ' + REGEX_ABSTRACT_METHOD);
+
     const REGEX_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
       REGEX_ACCESSORS.source +
-      /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
+      /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/.source,
       'gm'
     );
     const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
@@ -88,7 +101,7 @@ module.exports = {
     };
 
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
-    function parseFile(text) {
+    function parseFile(text, lang) {
       let fileData = [];
       let classData = [];
       let classes = [];
@@ -121,7 +134,7 @@ module.exports = {
         } else {
           fileData = fileData.concat(parsedClass);
         }
-        let members = parseClass(classes[i]);
+        let members = parseClass(classes[i], lang);
         if (members !== undefined) fileData = fileData.concat(members);
         i++;
       });
@@ -130,8 +143,9 @@ module.exports = {
     }
 
     ///// Parse Class //////////////////////////////////////////////////////////////////////////////////////////////////
-    function parseClass(target) {
+    function parseClass(target, lang) {
       let children = [];
+      let classType = target.name.toLowerCase(); // Class, Enum, Interface, etc.
 
       ///// Handle Constructors
       let constructorData = merge(
@@ -147,6 +161,20 @@ module.exports = {
         children = children.concat(parseData(constructorData, ENTITY_TYPE.CONSTRUCTOR));
       }
 
+      ///// Handle Abstract Methods
+      let abstractData = merge(
+        matchAll(target.bodyCodeOnly, REGEX_ABSTRACT_METHOD, true),
+        matchAll(target.bodyCodeOnly, REGEX_ABSTRACT_METHOD_NODOC, true),
+        4,
+        4
+      );
+      abstractData = filter(abstractData);
+      __LOG__("Abstract Methods = " + abstractData.length);
+
+      if (abstractData.length > 0) {
+        children = children.concat(parseData(abstractData, ENTITY_TYPE.METHOD));
+      }
+
       ///// Handle Methods
       let methodData = merge(
         matchAll(target.bodyCodeOnly, REGEX_METHOD, true),
@@ -154,7 +182,7 @@ module.exports = {
         4,
         4
       );
-      methodData = filter(methodData);
+      methodData = filter(methodData, lang, classType);
       __LOG__("Methods = " + methodData.length);
 
       if (methodData.length > 0) {
@@ -168,7 +196,7 @@ module.exports = {
         4,
         4
       );
-      propertyData = filter(propertyData);
+      propertyData = filter(propertyData, lang, classType);
       __LOG__("Properties = " + propertyData.length);
 
       if (propertyData.length > 0) {
@@ -296,7 +324,7 @@ module.exports = {
                 if (entityType.length) {
                   entityType = entityType[0].toUpperCase() + entityType.substr(1);
                 }
-                if (entityType === `Class`) {
+                if (CLASS_TYPES.includes(entityType)) {
                   firstProp = true;
                   isMethod = false;
                 }
@@ -314,9 +342,9 @@ module.exports = {
                   });
                 }
 
-                ///// Classes & Enums
-                if (entityType === 'Class' || entityType === 'Enum') {
-                  entityType = entityType.toLowerCase(entityType);
+                ///// Classes, Enum & Interface types
+                if (CLASS_AND_ENUM_TYPES.includes(entityType.toLowerCase())) {
+                  entityType = entityType.toLowerCase();
                   tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType}) ${deprecated}`);
                   text = `\n---\n### ${classPath} ${entityType}${deprecated}`;
 
@@ -419,9 +447,10 @@ module.exports = {
       __LOG__("Files found: " + files.length);
       for (let a = 0; a < files.length; a++) {
         let file = files[a];
-        __LOG__("File: " + file);
+        let lang = getLang(file);
+        __LOG__(`File: ${file} Lang: ${lang}`);
         let contents = fs.readFileSync(file).toString();
-        let javadocMatches = parseFile(contents);
+        let javadocMatches = parseFile(contents, lang);
         if (javadocMatches.length !== 0) {
           docComments[file] = javadocMatches;
         }
@@ -455,39 +484,44 @@ module.exports = {
       return ret;
     }
 
-    function filter(data) {
-      let ret = filterByAccessors(data);
-      ret = filterByExcluded(data);
+    function filter(data, lang, parentType) {
+      let ret = filterByAccessors(data, lang, parentType);
+      ret = filterByHidden(data, lang, parentType);
       return ret;
     }
 
-    function filterByAccessors(data) {
+    function filterByAccessors(data, lang, parentType) {
       let ret = [];
       data.forEach(function (target) {
         if (options.accessors.includes(target[1])) ret.push(target);
+        if (parentType === `interface` && lang === `apex` && isEmpty(target[1])) ret.push(target);
       });
       if (ret.length < data.length)
-        __DBG__(`Filtered out ${data.length - ret.length} entities based on accessors.`);
+        __DBG__(`Filtered out ${data.length - ret.length} types based on accessors.`);
       return ret;
     }
 
-    function filterByExcluded(data) {
+    function filterByHidden(data) {
       let ret = [];
       data.forEach(function (target) {
-        if (!isExcluded(target)) ret.push(target);
+        if (!isHidden(target)) ret.push(target);
       });
       if (ret.length < data.length)
-        __DBG__(`Filtered out ${data.length - ret.length} entities based on excluded.`);
+        __DBG__(`Filtered out ${data.length - ret.length} types which are @hidden.`);
       return ret;
     }
 
-    function isExcluded(data) {
+    function isHidden(data) {
+      let ret = false;
       let jd = data[0].match(REGEX_JAVADOC);
       if (jd === null) return false;
-      if (jd[0].includes(`@exclude`)) {
-        return true;
-      }
-      return false;
+      HIDDEN_TAGS.forEach(function(tag) {
+        if (jd[0].toLowerCase().includes(tag)) {
+          ret = true;
+          return;
+        }
+      });
+      return ret;
     }
 
     function merge(data1, data2, key1, key2) {
@@ -537,7 +571,7 @@ module.exports = {
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: true,
-        isExclude: isExcluded(data)
+        isExclude: isHidden(data)
       };
       return ret;
     }
@@ -556,7 +590,7 @@ module.exports = {
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: true,
-        isExclude: isExcluded(data)
+        isExclude: isHidden(data)
       };
       return ret;
     }
@@ -571,7 +605,7 @@ module.exports = {
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: true,
-        isExclude: isExcluded(data)
+        isExclude: isHidden(data)
       };
       return ret;
     }
@@ -579,7 +613,7 @@ module.exports = {
     function getClass(data) {
       let endIndex = getEndIndex(data);
       let ret = {
-        name: data[3], // Class or Enum
+        name: data[3], // Class, Enum, Interface, etc.
         accessor: data[1],
         toc: data[4],
         text: data[4],
@@ -594,7 +628,7 @@ module.exports = {
         level: undefined,
         isDeprecated: (data[0].includes(`@Deprecated`)),
         isJavadocRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`))),
-        isExclude: isExcluded(data)
+        isExclude: isHidden(data)
       };
       return ret;
     }
@@ -732,6 +766,12 @@ module.exports = {
       ret = str.substr(count, str.length);
       if (ret === "\n" || ret === " ") ret;
       return ret + "\n";
+    }
+
+    function isEmpty(str) {
+      if (str === null || str === undefined) return true;
+      if (str.trim() == ``) return true;
+      return false;
     }
 
     function __DBG__(msg) {
