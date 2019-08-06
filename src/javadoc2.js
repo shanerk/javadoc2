@@ -176,7 +176,7 @@ module.exports = {
         4,
         4
       );
-      constructorData = filter(constructorData);
+      constructorData = filter(constructorData, lang, classType);
       __LOG__("Constructors = " + constructorData.length);
 
       if (constructorData.length > 0) {
@@ -190,7 +190,7 @@ module.exports = {
         4,
         4
       );
-      abstractData = filter(abstractData);
+      abstractData = filter(abstractData, lang, classType);
       __LOG__("Abstract Methods = " + abstractData.length);
 
       if (abstractData.length > 0) {
