@@ -4,8 +4,8 @@ module.exports = {
     let isTestClass = false;
     let isDeprecatedClass = false;
 
-    const CLASS_TYPES = [`class`, `interface`];
-    const CLASS_AND_ENUM_TYPES = [`class`, `interface`, `enum`];
+    const CLASS_TYPES = [`Class`, `Interface`];
+    const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
@@ -17,7 +17,7 @@ module.exports = {
     const REGEX_JAVADOC_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
     const REGEX_JAVADOC_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
     const REGEX_JAVADOC_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
-    const REGEX_ACCESSORS = /^[ \t]*(global|public)/g;
+    const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/g;
 
     const REGEX_CLASS_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -105,6 +105,7 @@ module.exports = {
       let fileData = [];
       let classData = [];
       let classes = [];
+      let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
       classData = merge(
@@ -113,8 +114,15 @@ module.exports = {
         4,
         4
       );
-      classData = filter(classData);
 
+      ///// All classes
+      classData.forEach(function(data) {
+        let c = getClass(data);
+        allClasses.push(c);
+      });
+
+      ///// Filtered classes
+      classData = filter(classData);
       __LOG__("Classes = " + classData.length);
 
       classData.forEach(function(data) {
@@ -122,7 +130,7 @@ module.exports = {
         classes.push(c);
       });
 
-      classes = setClassBodyCodeOnly(classes);
+      classes = setClassBodyCodeOnly(allClasses);
       classes = setLevels(classes);
       classes = setClassPaths(classes); //.sort(ClassComparator);
 
@@ -146,6 +154,20 @@ module.exports = {
     function parseClass(target, lang) {
       let children = [];
       let classType = target.name.toLowerCase(); // Class, Enum, Interface, etc.
+
+      ///// Handle Properties
+      let propertyData = merge(
+        matchAll(target.bodyCodeOnly, REGEX_PROPERTY, true),
+        matchAll(target.bodyCodeOnly, REGEX_PROPERTY_NODOC, true),
+        4,
+        4
+      );
+      propertyData = filter(propertyData, lang, classType);
+      __LOG__("Properties = " + propertyData.length);
+
+      if (propertyData.length > 0) {
+        children = children.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
+      }
 
       ///// Handle Constructors
       let constructorData = merge(
@@ -187,20 +209,6 @@ module.exports = {
 
       if (methodData.length > 0) {
         children = children.concat(parseData(methodData, ENTITY_TYPE.METHOD));
-      }
-
-      ///// Handle Properties
-      let propertyData = merge(
-        matchAll(target.bodyCodeOnly, REGEX_PROPERTY, true),
-        matchAll(target.bodyCodeOnly, REGEX_PROPERTY_NODOC, true),
-        4,
-        4
-      );
-      propertyData = filter(propertyData, lang, classType);
-      __LOG__("Properties = " + propertyData.length);
-
-      if (propertyData.length > 0) {
-        children = children.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
       }
 
       return children;
@@ -303,6 +311,7 @@ module.exports = {
           let firstProp = true;
           let firstParam = true;
           let isMethod = false;
+          let parentName;
           for (let a = 0; a < docCommentsFile.length; a++) {
             let cdataList = docCommentsFile[a];
             if (cdataList === null || cdataList === undefined) break;
@@ -320,17 +329,19 @@ module.exports = {
                 let deprecated = cdata[b].isDeprecated ||
                   (isDeprecatedClass && cdata[b].level > 0) ? ` (deprecated)` : ``;
 
-                ///// Proper-case entityType
+                ///// Propercase entityType
                 if (entityType.length) {
                   entityType = entityType[0].toUpperCase() + entityType.substr(1);
                 }
                 if (CLASS_TYPES.includes(entityType)) {
                   firstProp = true;
                   isMethod = false;
+                  parentName = entityName;
                 }
                 if (entityType === `Method`) {
                   firstParam = true;
                   isMethod = true;
+                  parentName = entityName;
                 }
 
                 ///// Code Blocks
@@ -343,7 +354,7 @@ module.exports = {
                 }
 
                 ///// Classes, Enum & Interface types
-                if (CLASS_AND_ENUM_TYPES.includes(entityType.toLowerCase())) {
+                if (CLASS_AND_ENUM_TYPES.includes(entityType)) {
                   entityType = entityType.toLowerCase();
                   tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType}) ${deprecated}`);
                   text = `\n---\n### ${classPath} ${entityType}${deprecated}`;
@@ -383,6 +394,7 @@ module.exports = {
                   } else {
                     text = `* TODO: Return value defined in class Javadoc, but should not be.`;
                   }
+
                 ///// Properties
                 } else if (entityType === "Property") {
                   if (firstProp) {
@@ -485,9 +497,9 @@ module.exports = {
     }
 
     function filter(data, lang, parentType) {
-      let ret = filterByAccessors(data, lang, parentType);
-      ret = filterByHidden(data, lang, parentType);
-      return ret;
+      data = filterByAccessors(data, lang, parentType);
+      data = filterByHidden(data, lang, parentType);
+      return data;
     }
 
     function filterByAccessors(data, lang, parentType) {
@@ -599,8 +611,8 @@ module.exports = {
       let ret = {
         name: "Method",
         accessor: data[1],
-        toc: data[2],
-        text: data[2] + ' ' + data[3] ,
+        toc: data[2] + data[3],
+        text: data[2] + data[3],
         line: getLineNumber(data),
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
