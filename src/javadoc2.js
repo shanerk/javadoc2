@@ -30,7 +30,7 @@ module.exports = {
 
     const REGEX_ABSTRACT_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
-      /^[ \t]*()()(?!return)([\w]+)[ \t]+(?!for)([\w]+)[ \t]*(\([^\)]*\))\s*;/.source,
+      /^[ \t]*()()(?!return)([\w\<\>\[\]\,\. ]*)[ \t]+(?!for)([\w]+)[ \t]*(\([^\)]*\))\s*;/.source,
       'gm'
     )
     const REGEX_ABSTRACT_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_ABSTRACT_METHOD_NODOC.source, 'gm');
@@ -39,7 +39,7 @@ module.exports = {
     const REGEX_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
       REGEX_ACCESSORS.source +
-      /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\, ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/.source,
+      /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/.source,
       'gm'
     );
     const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
@@ -246,7 +246,7 @@ module.exports = {
         if (entityHeader === undefined) return;
 
         ///// Process Javadocs, if any
-        if (data[0].match(REGEX_JAVADOC) !== null && !entityHeader.isDeprecated) {
+        if (data[0].match(REGEX_JAVADOC) !== null) {
           let javadocCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
           let javadocLines = javadocCommentClean.split(REGEX_JAVADOC_LINE_BEGINING);
           let attributeMatch = "default";
@@ -326,8 +326,8 @@ module.exports = {
                 let body = cdata[b].body === undefined ? "" : cdata[b].body;
                 let descrip = cdata[b].descrip === undefined ? "" : cdata[b].descrip.replace(/\n/gm, " ").trim();
                 let codeBlock = matchAll(cdata[b].text, REGEX_JAVADOC_CODE_BLOCK);
-                let deprecated = cdata[b].isDeprecated ||
-                  (isDeprecatedClass && cdata[b].level > 0) ? ` (deprecated)` : ``;
+                let isDeprecated = cdata[b].isDeprecated || (isDeprecatedClass && cdata[b].level > 0);
+                let deprecated =  isDeprecated ? ` *deprecated*` : ``;
 
                 ///// Propercase entityType
                 if (entityType.length) {
@@ -357,7 +357,8 @@ module.exports = {
                 if (CLASS_AND_ENUM_TYPES.includes(entityType)) {
                   entityType = entityType.toLowerCase();
                   tocData += (`\n1. [${classPath} ${entityType}](#${classPath.replace(/\s/g, "-")}-${entityType}) ${deprecated}`);
-                  text = `\n---\n### ${classPath} ${entityType}${deprecated}`;
+                  text = `${classPath} ${entityType}${deprecated}`;
+                  text = `\n---\n### ${text}`;
 
                   ///// Enum values
                   if (entityType === 'enum' && body !== undefined) {
