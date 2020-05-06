@@ -35,6 +35,17 @@ Support for major Apex language features including:
   * Properties
   * Parameters
   * Return Values
+  * Annotations
+
+### Special Handling
+
+Classes and methods marked with these annotations are hidden from the output:
+* @IsTest
+* @exclude
+* @hidden
+
+Classes and methods can be marked as deprecated:
+* @Deprecated
 
 ## 3. Javadoc Specification
 

@@ -453,7 +453,6 @@ module.exports = {
       __LOG__("Format:", options.format);
       __LOG__("Accessors:", options.accessors);
       __LOG__("Debug:", options.debug);
-      __DBG__("foo");
       const files = globule.find([].concat(options.include).concat(options.exclude));
       __LOG__("Files found: " + files.length);
       for (let a = 0; a < files.length; a++) {
@@ -790,7 +789,6 @@ module.exports = {
     }
 
     function __DBG__(msg) {
-      console.log(options.debug + ` ` + msg);
       if (options.debug == `true`) {
         let otherArgs = Array.prototype.slice.call(arguments);
         otherArgs.shift();
