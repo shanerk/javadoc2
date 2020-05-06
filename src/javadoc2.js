@@ -58,7 +58,7 @@ module.exports = {
     );
     const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
 
-    const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
+    const STR_TODO = "TODO: No valid documentation currently exists for this _ENTITY_.";
 
     const ENTITY_TYPE = {
       CLASS: 1,
@@ -84,7 +84,7 @@ module.exports = {
         output: undefined,
         format: "markdown",
         accessors: ["global"],
-        dbg: "false"
+        debug: "false"
       }, optionsArg);
       hasOutput = options.output;
       ///// Negate all the excluded patterns:
@@ -452,6 +452,8 @@ module.exports = {
       __LOG__("Output:", options.output);
       __LOG__("Format:", options.format);
       __LOG__("Accessors:", options.accessors);
+      __LOG__("Debug:", options.debug);
+      __DBG__("foo");
       const files = globule.find([].concat(options.include).concat(options.exclude));
       __LOG__("Files found: " + files.length);
       for (let a = 0; a < files.length; a++) {
@@ -788,7 +790,8 @@ module.exports = {
     }
 
     function __DBG__(msg) {
-      if (options && options.dbg === `true`) {
+      console.log(options.debug + ` ` + msg);
+      if (options.debug == `true`) {
         let otherArgs = Array.prototype.slice.call(arguments);
         otherArgs.shift();
         console.log.apply(console, ["[DEBUG] " + msg].concat(otherArgs));
