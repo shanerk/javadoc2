@@ -1,7 +1,14 @@
 #! /usr/bin/env node
 
 const args = require("yargs")
-	.version("1.0.7")
+	.version("2.1.0")
+	.option("accessors", {
+		type: "array",
+		alias: "a",
+		default: ["global"],
+		describe: "List of accessors to parse (global, public, etc)",
+		help: "help"
+	})
 	.option("include", {
 		type: "array",
 		alias: "i",
@@ -29,6 +36,14 @@ const args = require("yargs")
 		demmandOption: true,
 		describe: "File to output the generated contents.",
 		help: "help"
-	}).argv;
+	})
+	.option("debug", {
+		type: "string",
+		alias: "d",
+		default: "false",
+		describe: "If true, debug messages are shown.",
+		help: "help"
+	})
+	.argv;
 
 require(__dirname + "/../src/javadoc2.js").generate(args);

@@ -26,7 +26,6 @@ module.exports = {
       'gm'
     );
     const REGEX_CLASS = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CLASS_NODOC.source, 'gm');
-    __DBG__('REGEX_CLASS = ' + REGEX_CLASS);
 
     const REGEX_ABSTRACT_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -34,7 +33,6 @@ module.exports = {
       'gm'
     )
     const REGEX_ABSTRACT_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_ABSTRACT_METHOD_NODOC.source, 'gm');
-    __DBG__('REGEX_ABSTRACT_METHOD = ' + REGEX_ABSTRACT_METHOD);
 
     const REGEX_METHOD_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -43,7 +41,6 @@ module.exports = {
       'gm'
     );
     const REGEX_METHOD = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_METHOD_NODOC.source, 'gm');
-    __DBG__('REGEX_METHOD = ' + REGEX_METHOD);
 
     const REGEX_CONSTRUCTOR_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -52,7 +49,6 @@ module.exports = {
       'gm'
     );
     const REGEX_CONSTRUCTOR = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_CONSTRUCTOR_NODOC.source, 'gm');
-    __DBG__('REGEX_CONSTRUCTOR = ' + REGEX_CONSTRUCTOR);
 
     const REGEX_PROPERTY_NODOC = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -61,7 +57,6 @@ module.exports = {
       'gm'
     );
     const REGEX_PROPERTY = new RegExp(REGEX_JAVADOC.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source, 'gm');
-    __DBG__('REGEX_PROPERTY = ' + REGEX_PROPERTY);
 
     const STR_TODO = "TODO: No documentation currently exists for this _ENTITY_.";
 
@@ -88,7 +83,8 @@ module.exports = {
         exclude: ["**/node_modules/**/*"],
         output: undefined,
         format: "markdown",
-        accessors: ["global"]
+        accessors: ["global"],
+        dbg: "false"
       }, optionsArg);
       hasOutput = options.output;
       ///// Negate all the excluded patterns:
@@ -506,11 +502,15 @@ module.exports = {
     function filterByAccessors(data, lang, parentType) {
       let ret = [];
       data.forEach(function (target) {
+        // Include type if * is specified in accessor args
+        if (options.accessors.includes(`*`)) ret.push(target);
+        // Include type if accessor is in args
         if (options.accessors.includes(target[1])) ret.push(target);
+        // Include child classes for apex if no accessor is specified
         if (parentType === `interface` && lang === `apex` && isEmpty(target[1])) ret.push(target);
       });
       if (ret.length < data.length)
-        __DBG__(`Filtered out ${data.length - ret.length} types based on accessors.`);
+        __DBG__(`Filtered out ${data.length - ret.length} types based on accessors (` + options.accessors + `).`);
       return ret;
     }
 
@@ -788,11 +788,11 @@ module.exports = {
     }
 
     function __DBG__(msg) {
-      ///*
-      let otherArgs = Array.prototype.slice.call(arguments);
-      otherArgs.shift();
-      console.log.apply(console, ["[DEBUGGING] " + msg].concat(otherArgs));
-      //*/
+      if (options && options.dbg === `true`) {
+        let otherArgs = Array.prototype.slice.call(arguments);
+        otherArgs.shift();
+        console.log.apply(console, ["[DEBUG] " + msg].concat(otherArgs));
+      }  
     }
 
     function __LOG__(msg) {
