@@ -33,19 +33,66 @@ Support for major Apex language features including:
   * Abstract Methods
   * Constructors
   * Properties
-  * Parameters
-  * Return Values
+  * Parameters `@param` tag
+  * Return Values `@return` tag
   * Annotations
 
-### Special Handling
+### @IsTest Annotation
 
-Classes and methods marked with these annotations are hidden from the output:
-* @IsTest
-* @exclude
-* @hidden
+Support for the Salesforce `@IsTest` annotation is provided.  Classes and/or methods can be marked as tests.  If the class is marked as a test, the entire class is excluded from the docs.  If individual methods are marked as tests, only they are excluded from the docs.
 
-Classes and methods can be marked as deprecated:
-* @Deprecated
+## @Deprecated Annotation
+
+Support for the Salesforce `@Deprecated` annotation is provided.  Classes and/or methods can be marked as deprecated.  If the class is marked as deprecated, the entire class is excluded from the docs.  If individual methods are marked as deprecated, only they are excluded from the docs.
+
+```java
+@Deprecated
+global with sharing class foo {
+  @Deprecated
+  global String bar() { get{} set{} }
+```
+
+### Javadoc @exclude or @hidden
+
+Support for the `@exclude` and `@hidden` tags.  In both cases, the class and/or method is excluded from the docs.
+
+```java
+    global class foo {
+        /** @exclude */
+        global bar() {}
+        /** @hidden */
+        global rab() {}
+        /** @param i is the value */
+        global foobar(Integer i) {}
+    }
+  ```
+
+  In the example above, the methods `bar()` and `rab()` are excluded from the docs, but the class `foo` and method `foobar()` are included.
+
+### Javadoc Source Code
+
+Support for source code examples embedded in the Javadoc comment.
+
+```java
+  /**
+  * Multiplies the provided Integer value by 2.  Null safe.
+  *
+  * {@code
+  * Integer foo = multiply(2); // foo = 4;
+  * Integer bar;
+  * foo = multiply(bar); // bar = null;
+  * }
+  *
+  *
+  * @param i The integer value to multiply
+  *
+  * @return The value multiplied by 2
+  */
+  global static Integer multiply(Integer i) {
+    if (i == null) return null;
+    return i * 2;
+  }
+```
 
 ## 3. Javadoc Specification
 
@@ -56,9 +103,7 @@ The basic structure of writing document comments is to embed them inside `/** ..
 // import statements
 
 /**
- * @author      Firstname Lastname <address @ example.com>
- * @version     1.6                 (current version number of program)
- * @since       1.2          (the version of the package this class was first added to)
+ * @author Firstname Lastname <address @ example.com>      
  */
 public class Test {
     // class body
@@ -103,7 +148,32 @@ public int y;
 ### Special Notation
 
 To add the symbols `*/` inside our javadoc comments, simply write `* /` instead,
-and this will be translated to `*/` automatically.
+and this will be translated to `*/` automatically.  You may want to use this to embed sample comments within a sample `@code` block, for instance.
+
+### Supported Javadoc Tags
+
+#### Supported
+* @author
+* @param
+* @return
+* @hidden (@exclude, non-standard tag)
+* @code
+
+#### Not Supported
+* @version
+* @since
+* @see
+* @exception
+* @throws
+* @deprecated (although the annotation `@Deprecated` is supported)
+* @link
+* @linkplain
+* @value
+* @literal
+* @serial
+* @serialData
+* @serialField
+* @description (non-standard tag)
 
 ### Summary
 *Any comments that do not conform to the specification will be ignored or produce undesired results.*
