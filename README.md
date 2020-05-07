@@ -111,7 +111,7 @@ public class Test {
 ```
 
 ### Methods
-For methods there is (1) a short, concise, one line description to explain what the item does. This is followed by (2) a longer description that may span multiple paragraphs. The details can be explained in full here. This section is optional. Lastly, there is (3) a tag section to list the accepted input arguments and return values of the method. Note that all of the Javadoc is treated as HTML so the multiple paragraph sections are separated by a "<p>" paragraph break tag.
+For methods there is (1) a short, concise, one line description to explain what the item does. This is followed by (2) a longer description that may span multiple paragraphs. The details can be explained in full here. This section is optional. Lastly, there is (3) a tag section to list the accepted input arguments and return values of the method. Note that all of the Javadoc is treated as HTML so the multiple paragraph sections are separated by a "\<p\>" paragraph break tag.
 
 ```java
 /**
@@ -188,7 +188,7 @@ See the following resources for more on writing Javadocs:
 ### Arguments
 
 * `--accessors` Array of accessors to include (**default: "global"**)
-* `--include` Array of file patterns to include (**default: "**/*.cls" which means all Apex classes within the current directory tree**)
+* `--include` Array of file patterns to include (**default: "\*\*/\*.cls" which means all Apex classes within the current directory tree**)
 * `--exclude` Array of file patterns to exclude
 * `--output` The name of the output file, if omitted, output will only go to the terminal window stdout
 * `--format` The output format, either "javascript" or "markdown" (**default: "markdown"**)
