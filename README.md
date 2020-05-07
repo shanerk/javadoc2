@@ -41,7 +41,7 @@ Support for major Apex language features including:
 
 Support for the Salesforce `@IsTest` annotation is provided.  Classes and/or methods can be marked as tests.  If the class is marked as a test, the entire class is excluded from the docs.  If individual methods are marked as tests, only they are excluded from the docs.
 
-## @Deprecated Annotation
+### @Deprecated Annotation
 
 Support for the Salesforce `@Deprecated` annotation is provided.  Classes and/or methods can be marked as deprecated.  If the class is marked as deprecated, the entire class is excluded from the docs.  If individual methods are marked as deprecated, only they are excluded from the docs.
 
@@ -52,7 +52,7 @@ global with sharing class foo {
   global String bar() { get{} set{} }
 ```
 
-### Javadoc @exclude or @hidden
+### Javadoc @exclude and @hidden Tags
 
 Support for the `@exclude` and `@hidden` tags.  In both cases, the class and/or method is excluded from the docs.
 
@@ -187,12 +187,12 @@ See the following resources for more on writing Javadocs:
 
 ### Arguments
 
-* `--accessors` Array of accessors to include (default: "global")
-* `--include` Array of file patterns to include (default: "**/*.cls" which means all Apex classes within the current directory tree)
+* `--accessors` Array of accessors to include (**default: "global"**)
+* `--include` Array of file patterns to include (**default: "**/*.cls" which means all Apex classes within the current directory tree**)
 * `--exclude` Array of file patterns to exclude
 * `--output` The name of the output file, if omitted, output will only go to the terminal window stdout
-* `--format` The output format, either "javascript" or "markdown" (default: "markdown")
-* `--debug` Emits debug messages if "true" (default: "false")
+* `--format` The output format, either "javascript" or "markdown" (**default: "markdown"**)
+* `--debug` Emits debug messages if "true" (**default: "false"**)
 
 ### Extract documentation by the CLI
 
